@@ -17,6 +17,11 @@ export const crear = asyncHandler(async (req, res) => {
   return response.created(res, producto, 'Producto creado');
 });
 
+export const importarMasivo = asyncHandler(async (req, res) => {
+  const productos = await productosService.crearProductosMasivo(req.usuario.negocio_id, req.body.filas);
+  return response.created(res, productos, `${productos.length} productos importados`);
+});
+
 export const actualizar = asyncHandler(async (req, res) => {
   const producto = await productosService.actualizarProducto(req.params.id, req.body);
   return response.success(res, producto, 'Producto actualizado');
@@ -24,6 +29,11 @@ export const actualizar = asyncHandler(async (req, res) => {
 
 export const eliminar = asyncHandler(async (req, res) => {
   await productosService.eliminarProducto(req.params.id);
+  return response.noContent(res);
+});
+
+export const eliminarPermanente = asyncHandler(async (req, res) => {
+  await productosService.eliminarProductoPermanente(req.params.id);
   return response.noContent(res);
 });
 
@@ -47,7 +57,8 @@ export const crearInsumo = asyncHandler(async (req, res) => {
   return response.created(res, insumo, 'Insumo creado');
 });
 
-export const ajustarStock = asyncHandler(async (req, res) => {
-  const insumo = await productosService.ajustarStockInsumo(req.params.id, req.body.cantidad);
-  return response.success(res, insumo, 'Stock ajustado');
+export const asignarStockBarra = asyncHandler(async (req, res) => {
+  const { barra_id, cantidad, stock_minimo } = req.body;
+  const resultado = await productosService.asignarStockBarra(req.usuario.negocio_id, req.params.id, barra_id, cantidad, stock_minimo);
+  return response.success(res, resultado, 'Stock asignado');
 });

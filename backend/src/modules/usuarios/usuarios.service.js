@@ -4,7 +4,7 @@ import { AppError } from '../../utils/AppError.js';
 export async function listarUsuarios(negocioId) {
   const { data, error } = await supabaseAdmin
     .from('usuarios')
-    .select('id, nombre, apellido, email, rol, activo, avatar_url, created_at')
+    .select('id, nombre, apellido, email, rol, activo, avatar_url, barra_id, barra:barras(id, nombre), created_at')
     .eq('negocio_id', negocioId)
     .order('nombre');
   if (error) throw new AppError('No se pudieron listar los usuarios.', 500, error.message);
@@ -15,7 +15,7 @@ export async function listarUsuarios(negocioId) {
  * Crea un empleado: primero en Supabase Auth, luego su perfil en `usuarios`.
  * Si falla el segundo paso, revierte el usuario de Auth para no dejar huérfanos.
  */
-export async function crearEmpleado({ negocioId, email, password, nombre, apellido, rol, pin }) {
+export async function crearEmpleado({ negocioId, email, password, nombre, apellido, rol, pin, barraId }) {
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
@@ -33,6 +33,7 @@ export async function crearEmpleado({ negocioId, email, password, nombre, apelli
       apellido: apellido || null,
       email,
       pin: pin || null,
+      barra_id: barraId || null,
     })
     .select()
     .single();

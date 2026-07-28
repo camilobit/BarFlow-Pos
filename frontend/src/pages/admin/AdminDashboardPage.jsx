@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { TrendingUp, Receipt, Users, Flame } from 'lucide-react';
+import { TrendingUp, Receipt, Users, Flame, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { dashboardApi } from '../../services/endpoints.js';
+import { descargarCSV } from '../../utils/csv.js';
 import KpiCard from '../../components/admin/KpiCard.jsx';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
 
@@ -16,11 +17,31 @@ export default function AdminDashboardPage() {
 
   const { ventas, topProductos, porMesero, porBarra, pico } = data;
 
+  function exportarReporte() {
+    descargarCSV('reporte_productos_mas_vendidos.csv', topProductos.map((p) => ({
+      producto: p.producto_nombre,
+      unidades_vendidas: p.unidades_vendidas,
+      ingresos: p.ingresos,
+    })));
+    descargarCSV('reporte_ventas_por_mesero.csv', porMesero.map((m) => ({
+      mesero: `${m.mesero?.nombre || ''} ${m.mesero?.apellido || ''}`.trim() || 'Sin asignar',
+      pedidos: m.pedidos,
+      total_vendido: m.total,
+    })));
+    descargarCSV('reporte_ventas_por_barra.csv', porBarra.map((b) => ({
+      barra: b.barra?.nombre || 'Sin barra',
+      total_vendido: b.total,
+    })));
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-ink-900">Panel general</h1>
-        <p className="text-sm text-mist-500">Resumen de la operación en tiempo real</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-ink-900">Panel general</h1>
+          <p className="text-sm text-mist-500">Resumen de la operación en tiempo real</p>
+        </div>
+        <button onClick={exportarReporte} className="btn-secondary"><Download size={16} /> Descargar reportes (CSV)</button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

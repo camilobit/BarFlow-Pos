@@ -33,9 +33,12 @@ export default function BarraPage() {
 
   const cargarBarras = useCallback(async () => {
     const data = await barrasApi.listar();
-    setBarras(data);
-    if (data.length && !barraId) setBarraId(data[0].id);
-  }, [barraId]);
+    // Si este usuario tiene una barra fija asignada (ej. barravortex@negocio.com),
+    // solo ve esa barra — no puede cambiar a otra desde la interfaz.
+    const disponibles = perfil.barra_id ? data.filter((b) => b.id === perfil.barra_id) : data;
+    setBarras(disponibles);
+    if (disponibles.length && !barraId) setBarraId(perfil.barra_id || disponibles[0].id);
+  }, [barraId, perfil.barra_id]);
 
   const cargarItems = useCallback(async () => {
     if (!barraId) return;
@@ -126,17 +129,21 @@ export default function BarraPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {barras.map((b) => (
-            <button
-              key={b.id}
-              onClick={() => setBarraId(b.id)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-                barraId === b.id ? 'bg-petrol-600 text-white' : 'bg-ink-800 text-mist-300 hover:bg-ink-800/70'
-              }`}
-            >
-              {b.nombre}
-            </button>
-          ))}
+          {barras.length > 1 ? (
+            barras.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => setBarraId(b.id)}
+                className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+                  barraId === b.id ? 'bg-petrol-600 text-white' : 'bg-ink-800 text-mist-300 hover:bg-ink-800/70'
+                }`}
+              >
+                {b.nombre}
+              </button>
+            ))
+          ) : (
+            barras[0] && <span className="rounded-xl bg-ink-800 px-3.5 py-2 text-xs font-semibold text-white">{barras[0].nombre}</span>
+          )}
           <button onClick={cerrarSesion} className="ml-2 rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white">
             <LogOut size={18} />
           </button>

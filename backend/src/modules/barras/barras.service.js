@@ -26,3 +26,20 @@ export async function actualizarBarra(barraId, payload) {
   if (error) throw new AppError('No se pudo actualizar la barra.', 500, error.message);
   return data;
 }
+
+// Solo se puede borrar de verdad una barra que nunca tuvo pedidos (la base
+// de datos lo protege con una restricción de llave foránea). Si ya tiene
+// historial, sugerimos desactivarla en vez de borrarla.
+export async function eliminarBarra(barraId) {
+  const { error } = await supabaseAdmin.from('barras').delete().eq('id', barraId);
+  if (error) {
+    if (error.code === '23503') {
+      throw new AppError(
+        'Esta barra ya tiene pedidos o productos asociados, así que no se puede eliminar sin perder ese historial. Desactívala en su lugar.',
+        409
+      );
+    }
+    throw new AppError('No se pudo eliminar la barra.', 500, error.message);
+  }
+  return { ok: true };
+}

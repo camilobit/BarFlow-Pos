@@ -4,11 +4,12 @@ import { response } from '../../utils/response.utils.js';
 import * as pedidosService from './pedidos.service.js';
 
 export const crear = asyncHandler(async (req, res) => {
-  const { mesa_id, cliente_id, observaciones, items } = req.body;
+  const { mesa_id, referencia_mesa, cliente_id, observaciones, items } = req.body;
   const pedido = await pedidosService.crearPedido({
     negocioId: req.usuario.negocio_id,
     meseroId: req.usuario.id,
     mesaId: mesa_id,
+    referenciaMesa: referencia_mesa,
     clienteId: cliente_id,
     observaciones,
     items,

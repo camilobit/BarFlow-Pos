@@ -5,10 +5,12 @@ import LoginPage from './pages/auth/LoginPage.jsx';
 import BarraPage from './pages/barra/BarraPage.jsx';
 import MeseroPage from './pages/mesero/MeseroPage.jsx';
 import MeseroMesaDetalle from './pages/mesero/MeseroMesaDetalle.jsx';
+import MeseroPedidoDetalle from './pages/mesero/MeseroPedidoDetalle.jsx';
 
 import AdminLayout from './components/layout/AdminLayout.jsx';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage.jsx';
 import AdminMesasPage from './pages/admin/AdminMesasPage.jsx';
+import AdminBarrasPage from './pages/admin/AdminBarrasPage.jsx';
 import AdminProductosPage from './pages/admin/AdminProductosPage.jsx';
 import AdminInventarioPage from './pages/admin/AdminInventarioPage.jsx';
 import AdminCajaPage from './pages/admin/AdminCajaPage.jsx';
@@ -46,6 +48,14 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/mesero/pedido/:pedidoId"
+        element={
+          <ProtectedRoute roles={['mesero', 'admin_negocio', 'super_admin']}>
+            <MeseroPedidoDetalle />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/admin"
@@ -57,6 +67,7 @@ export default function App() {
       >
         <Route index element={<AdminDashboardPage />} />
         <Route path="mesas" element={<AdminMesasPage />} />
+        <Route path="barras" element={<AdminBarrasPage />} />
         <Route path="productos" element={<AdminProductosPage />} />
         <Route path="inventario" element={<AdminInventarioPage />} />
         <Route path="caja" element={<AdminCajaPage />} />

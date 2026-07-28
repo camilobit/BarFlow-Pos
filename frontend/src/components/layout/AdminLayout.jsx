@@ -1,12 +1,13 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Grid3x3, Package, Boxes, Wallet, Users, UserCog, Building2, LogOut,
+  LayoutDashboard, Grid3x3, Package, Boxes, Wallet, Users, UserCog, Building2, LogOut, Martini,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
 const NAV = [
   { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true },
   { to: '/admin/mesas', label: 'Mesas', icon: Grid3x3 },
+  { to: '/admin/barras', label: 'Barras', icon: Martini },
   { to: '/admin/productos', label: 'Productos', icon: Package },
   { to: '/admin/inventario', label: 'Inventario', icon: Boxes },
   { to: '/admin/caja', label: 'Caja', icon: Wallet },

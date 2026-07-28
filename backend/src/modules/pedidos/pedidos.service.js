@@ -13,7 +13,7 @@ const SELECT_PEDIDO_COMPLETO = `
   )
 `;
 
-export async function crearPedido({ negocioId, meseroId, mesaId, clienteId, observaciones, items }) {
+export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa, clienteId, observaciones, items }) {
   // 1) Crear el pedido base
   const { data: pedido, error: errorPedido } = await supabaseAdmin
     .from('pedidos')
@@ -21,6 +21,7 @@ export async function crearPedido({ negocioId, meseroId, mesaId, clienteId, obse
       negocio_id: negocioId,
       mesero_id: meseroId,
       mesa_id: mesaId || null,
+      referencia_mesa: referenciaMesa || null,
       cliente_id: clienteId || null,
       observaciones: observaciones || null,
       estado: 'pendiente',

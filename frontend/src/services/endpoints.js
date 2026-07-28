@@ -28,13 +28,15 @@ export const mesasApi = {
 export const productosApi = {
   listar: (params) => api.get('/productos', { params }).then((r) => r.data),
   crear: (payload) => api.post('/productos', payload).then((r) => r.data),
+  importarMasivo: (filas) => api.post('/productos/importar-masivo', { filas }).then((r) => r.data),
   actualizar: (id, payload) => api.patch(`/productos/${id}`, payload).then((r) => r.data),
   eliminar: (id) => api.delete(`/productos/${id}`),
+  eliminarPermanente: (id) => api.delete(`/productos/${id}/permanente`),
   categorias: () => api.get('/productos/categorias/todas').then((r) => r.data),
   crearCategoria: (payload) => api.post('/productos/categorias', payload).then((r) => r.data),
   insumos: () => api.get('/productos/insumos/todos').then((r) => r.data),
   crearInsumo: (payload) => api.post('/productos/insumos', payload).then((r) => r.data),
-  ajustarStock: (id, cantidad) => api.patch(`/productos/insumos/${id}/ajustar-stock`, { cantidad }).then((r) => r.data),
+  asignarStockBarra: (id, payload) => api.post(`/productos/insumos/${id}/asignar-stock`, payload).then((r) => r.data),
 };
 
 export const cajaApi = {
@@ -75,12 +77,18 @@ export const negociosApi = {
   actualizar: (id, payload) => api.patch(`/negocios/${id}`, payload).then((r) => r.data),
   suspender: (id) => api.patch(`/negocios/${id}/suspender`).then((r) => r.data),
   activar: (id) => api.patch(`/negocios/${id}/activar`).then((r) => r.data),
+  marcarPago: (id, pagado, pagado_hasta) => api.patch(`/negocios/${id}/pago`, { pagado, pagado_hasta }).then((r) => r.data),
+  eliminar: (id) => api.delete(`/negocios/${id}`),
   estadisticas: () => api.get('/negocios/estadisticas').then((r) => r.data),
+  miConfiguracion: () => api.get('/negocios/configuracion').then((r) => r.data),
+  actualizarMiConfiguracion: (payload) => api.patch('/negocios/configuracion', payload).then((r) => r.data),
 };
 
 export const barrasApi = {
-  listar: () => api.get('/barras').then((r) => r.data),
+  listar: (negocioId) => api.get('/barras', { params: negocioId ? { negocio_id: negocioId } : {} }).then((r) => r.data),
   crear: (payload) => api.post('/barras', payload).then((r) => r.data),
+  actualizar: (id, payload) => api.patch(`/barras/${id}`, payload).then((r) => r.data),
+  eliminar: (id) => api.delete(`/barras/${id}`),
 };
 
 export const notificacionesApi = {

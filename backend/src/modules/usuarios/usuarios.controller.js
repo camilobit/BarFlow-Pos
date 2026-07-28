@@ -10,7 +10,7 @@ export const listar = asyncHandler(async (req, res) => {
 
 export const crear = asyncHandler(async (req, res) => {
   const negocioId = req.usuario.rol === 'super_admin' ? req.body.negocio_id : req.usuario.negocio_id;
-  const usuario = await usuariosService.crearEmpleado({ ...req.body, negocioId });
+  const usuario = await usuariosService.crearEmpleado({ ...req.body, negocioId, barraId: req.body.barra_id });
   return response.created(res, usuario, 'Empleado creado');
 });
 

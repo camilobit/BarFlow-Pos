@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const crearPedidoSchema = z.object({
   mesa_id: z.string().uuid().nullable().optional(),
+  referencia_mesa: z.string().max(80).nullable().optional(),
   cliente_id: z.string().uuid().nullable().optional(),
   observaciones: z.string().max(500).optional(),
   items: z

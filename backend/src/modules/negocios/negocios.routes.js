@@ -5,13 +5,21 @@ import * as ctrl from './negocios.controller.js';
 import { crearNegocioSchema } from './negocios.validator.js';
 
 const router = Router();
-router.use(requireAuth, requireRole('super_admin'));
+router.use(requireAuth);
 
-router.get('/', ctrl.listar);
-router.get('/estadisticas', ctrl.estadisticas);
-router.post('/', validate(crearNegocioSchema), ctrl.crear);
-router.patch('/:id', ctrl.actualizar);
-router.patch('/:id/suspender', ctrl.suspender);
-router.patch('/:id/activar', ctrl.activar);
+// Configuración operativa del propio negocio (ej. modo de mesas): la lee
+// cualquier rol del negocio, pero solo el admin (o super_admin) la cambia.
+router.get('/configuracion', ctrl.miConfiguracion);
+router.patch('/configuracion', requireRole('admin_negocio', 'super_admin'), ctrl.actualizarMiConfiguracion);
+
+// Administración de negocios: exclusivo de super_admin
+router.get('/', requireRole('super_admin'), ctrl.listar);
+router.get('/estadisticas', requireRole('super_admin'), ctrl.estadisticas);
+router.post('/', requireRole('super_admin'), validate(crearNegocioSchema), ctrl.crear);
+router.patch('/:id', requireRole('super_admin'), ctrl.actualizar);
+router.patch('/:id/suspender', requireRole('super_admin'), ctrl.suspender);
+router.patch('/:id/activar', requireRole('super_admin'), ctrl.activar);
+router.patch('/:id/pago', requireRole('super_admin'), ctrl.marcarPago);
+router.delete('/:id', requireRole('super_admin'), ctrl.eliminar);
 
 export default router;

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { usuariosApi, negociosApi } from '../../services/endpoints.js';
+import { usuariosApi, negociosApi, barrasApi } from '../../services/endpoints.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import Modal from '../../components/common/Modal.jsx';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
@@ -12,7 +12,7 @@ const ROLES = [
   { valor: 'mesero', etiqueta: 'Mesero' },
 ];
 
-const FORM_VACIO = { nombre: '', apellido: '', email: '', password: '', rol: 'admin_negocio', pin: '' };
+const FORM_VACIO = { nombre: '', apellido: '', email: '', password: '', rol: 'admin_negocio', pin: '', barra_id: '' };
 
 export default function AdminEquipoPage() {
   const { perfil } = useAuth();
@@ -20,6 +20,7 @@ export default function AdminEquipoPage() {
 
   const [usuarios, setUsuarios] = useState(null);
   const [negocios, setNegocios] = useState([]);
+  const [barras, setBarras] = useState([]);
   const [negocioSeleccionado, setNegocioSeleccionado] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
@@ -37,6 +38,10 @@ export default function AdminEquipoPage() {
 
   const negocioActivo = esSuperAdmin ? negocioSeleccionado : perfil.negocio_id;
 
+  useEffect(() => {
+    if (negocioActivo) barrasApi.listar(esSuperAdmin ? negocioActivo : undefined).then(setBarras);
+  }, [negocioActivo, esSuperAdmin]);
+
   const cargar = useCallback(async () => {
     if (!negocioActivo) {
       setUsuarios([]);
@@ -50,7 +55,9 @@ export default function AdminEquipoPage() {
   async function crearUsuario(e) {
     e.preventDefault();
     try {
-      await usuariosApi.crear({ ...form, negocio_id: negocioActivo });
+      const payload = { ...form, negocio_id: negocioActivo, barra_id: form.rol === 'barra' ? form.barra_id || null : null };
+      if (!payload.pin) delete payload.pin; // '' no es un PIN válido, mejor no enviarlo
+      await usuariosApi.crear(payload);
       toast.success('Empleado creado. Ya puede iniciar sesión con su correo y contraseña.');
       setModalAbierto(false);
       setForm(FORM_VACIO);
@@ -117,7 +124,10 @@ export default function AdminEquipoPage() {
               <tr key={u.id} className="border-b border-mist-100 last:border-0">
                 <td className="px-4 py-3 font-medium text-ink-900">{u.nombre} {u.apellido}</td>
                 <td className="px-4 py-3 text-mist-500">{u.email}</td>
-                <td className="px-4 py-3 capitalize text-ink-800">{u.rol.replace('_', ' ')}</td>
+                <td className="px-4 py-3 capitalize text-ink-800">
+                  {u.rol.replace('_', ' ')}
+                  {u.rol === 'barra' && u.barra?.nombre && <span className="ml-1 text-xs text-mist-500">({u.barra.nombre})</span>}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`badge ${u.activo ? 'bg-petrol-100 text-petrol-700' : 'bg-mist-100 text-mist-500'}`}>
                     {u.activo ? 'Activo' : 'Inactivo'}
@@ -170,6 +180,17 @@ export default function AdminEquipoPage() {
                 {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
               </select>
             </div>
+            {form.rol === 'barra' && (
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-mist-500">Barra asignada (correo fijo de esa caja)</label>
+                <select className="input" value={form.barra_id} onChange={(e) => setForm({ ...form, barra_id: e.target.value })}>
+                  <option value="">Sin asignar (puede elegir al entrar)</option>
+                  {barras.map((b) => (
+                    <option key={b.id} value={b.id}>{b.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button type="submit" className="btn-primary w-full">Crear empleado</button>
           </form>
         </Modal>
