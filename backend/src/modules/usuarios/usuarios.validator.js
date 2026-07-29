@@ -16,3 +16,7 @@ export const crearUsuarioSchema = z.object({
     .transform((v) => (v === '' ? undefined : v))
     .refine((v) => v === undefined || v.length === 4, { message: 'El PIN debe tener 4 dígitos' }),
 });
+
+export const resetearPasswordSchema = z.object({
+  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+});

@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock } from 'lucide-react';
+import { LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { pedidosApi, barrasApi, cajaApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
 import Modal from '../../components/common/Modal.jsx';
+import CambiarPasswordModal from '../../components/common/CambiarPasswordModal.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -28,6 +29,7 @@ export default function BarraPage() {
   const [cargando, setCargando] = useState(true);
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
   const [modalCerrarCaja, setModalCerrarCaja] = useState(false);
+  const [modalPassword, setModalPassword] = useState(false);
   const [montoInicial, setMontoInicial] = useState('');
   const [montoFinal, setMontoFinal] = useState('');
 
@@ -144,7 +146,10 @@ export default function BarraPage() {
           ) : (
             barras[0] && <span className="rounded-xl bg-ink-800 px-3.5 py-2 text-xs font-semibold text-white">{barras[0].nombre}</span>
           )}
-          <button onClick={cerrarSesion} className="ml-2 rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white">
+          <button onClick={() => setModalPassword(true)} className="ml-2 rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white" title="Cambiar contraseña">
+            <KeyRound size={18} />
+          </button>
+          <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white">
             <LogOut size={18} />
           </button>
         </div>
@@ -290,6 +295,8 @@ export default function BarraPage() {
           </form>
         </Modal>
       )}
+
+      {modalPassword && <CambiarPasswordModal onClose={() => setModalPassword(false)} />}
     </div>
   );
 }

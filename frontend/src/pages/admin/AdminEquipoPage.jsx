@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, KeyRound, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usuariosApi, negociosApi, barrasApi } from '../../services/endpoints.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -23,6 +23,8 @@ export default function AdminEquipoPage() {
   const [barras, setBarras] = useState([]);
   const [negocioSeleccionado, setNegocioSeleccionado] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [modalResetear, setModalResetear] = useState(null); // usuario seleccionado, o null
+  const [nuevaPassword, setNuevaPassword] = useState('');
   const [form, setForm] = useState(FORM_VACIO);
 
   // Un super_admin no tiene negocio propio (negocio_id = null) — necesita
@@ -71,6 +73,35 @@ export default function AdminEquipoPage() {
     if (!confirm(`¿Desactivar a ${usuario.nombre}? Ya no podrá iniciar sesión.`)) return;
     await usuariosApi.desactivar(usuario.id);
     cargar();
+  }
+
+  async function activar(usuario) {
+    await usuariosApi.actualizar(usuario.id, { activo: true });
+    toast.success(`${usuario.nombre} reactivado`);
+    cargar();
+  }
+
+  async function eliminarPermanente(usuario) {
+    if (!confirm(`¿Eliminar a "${usuario.nombre}" para siempre y liberar su correo? Solo se puede si nunca tuvo actividad.`)) return;
+    try {
+      await usuariosApi.eliminarPermanente(usuario.id);
+      toast.success('Empleado eliminado. Su correo ya está disponible de nuevo.');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  async function resetearPassword(e) {
+    e.preventDefault();
+    try {
+      await usuariosApi.resetearPassword(modalResetear.id, nuevaPassword);
+      toast.success(`Contraseña actualizada. Avísale a ${modalResetear.nombre} su nueva clave.`);
+      setModalResetear(null);
+      setNuevaPassword('');
+    } catch (err) {
+      toast.error(err.message);
+    }
   }
 
   if (!usuarios) return <LoadingScreen />;
@@ -134,11 +165,25 @@ export default function AdminEquipoPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {u.activo && (
-                    <button onClick={() => desactivar(u)} className="text-xs font-semibold text-red-500 hover:underline">
-                      Desactivar
+                  <div className="flex justify-end gap-3">
+                    {u.activo ? (
+                      <>
+                        <button onClick={() => setModalResetear(u)} className="flex items-center gap-1 text-xs font-semibold text-petrol-600 hover:underline">
+                          <KeyRound size={13} /> Resetear clave
+                        </button>
+                        <button onClick={() => desactivar(u)} className="text-xs font-semibold text-red-500 hover:underline">
+                          Desactivar
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => activar(u)} className="text-xs font-semibold text-petrol-600 hover:underline">
+                        Activar
+                      </button>
+                    )}
+                    <button onClick={() => eliminarPermanente(u)} className="text-mist-400 hover:text-red-500" title="Eliminar para siempre">
+                      <Trash2 size={14} />
                     </button>
-                  )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -192,6 +237,21 @@ export default function AdminEquipoPage() {
               </div>
             )}
             <button type="submit" className="btn-primary w-full">Crear empleado</button>
+          </form>
+        </Modal>
+      )}
+
+      {modalResetear && (
+        <Modal title={`Resetear contraseña de ${modalResetear.nombre}`} onClose={() => setModalResetear(null)}>
+          <form onSubmit={resetearPassword} className="space-y-3">
+            <p className="text-xs text-mist-500">
+              Ponle una contraseña temporal nueva y avísale al empleado por fuera de la app (WhatsApp, en persona, etc.) — no se envía ningún correo.
+            </p>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-mist-500">Contraseña nueva</label>
+              <input required type="password" minLength={6} className="input" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} autoFocus />
+            </div>
+            <button type="submit" className="btn-primary w-full">Actualizar contraseña</button>
           </form>
         </Modal>
       )}

@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Users, Plus } from 'lucide-react';
+import { LogOut, Users, Plus, KeyRound } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { mesasApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../common/LoadingScreen.jsx';
+import CambiarPasswordModal from '../common/CambiarPasswordModal.jsx';
 
 const ESTILO_ESTADO = {
   libre: 'bg-white border-mist-200 text-ink-900',
@@ -25,6 +26,7 @@ export default function MeseroMesasGrid() {
   const navigate = useNavigate();
   const [mesas, setMesas] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [modalPassword, setModalPassword] = useState(false);
 
   const cargar = useCallback(async () => {
     const data = await mesasApi.listar();
@@ -50,10 +52,17 @@ export default function MeseroMesasGrid() {
           <h1 className="font-display text-lg font-bold text-ink-900">Mesas</h1>
           <p className="text-xs text-mist-500">Hola, {perfil?.nombre}</p>
         </div>
-        <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100">
-          <LogOut size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setModalPassword(true)} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100" title="Cambiar contraseña">
+            <KeyRound size={20} />
+          </button>
+          <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100">
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
+
+      {modalPassword && <CambiarPasswordModal onClose={() => setModalPassword(false)} />}
 
       <main className="px-4 py-5">
         {mesas.length === 0 && (

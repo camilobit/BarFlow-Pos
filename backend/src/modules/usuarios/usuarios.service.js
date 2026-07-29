@@ -94,3 +94,37 @@ export async function desactivarUsuario(usuarioId) {
   if (error) throw new AppError('No se pudo desactivar el usuario.', 500, error.message);
   return { ok: true };
 }
+
+// Borra al empleado de verdad (tabla `usuarios` Y su cuenta de Supabase
+// Auth), liberando el correo para poder reutilizarlo. Solo funciona si
+// esa persona NUNCA tomó un pedido, abrió una caja, etc. — la base de
+// datos lo protege con una llave foránea. Si ya tiene historial, avisamos
+// claramente y sugerimos desactivar en vez de borrar.
+export async function eliminarUsuarioPermanente(usuarioId) {
+  const { error } = await supabaseAdmin.from('usuarios').delete().eq('id', usuarioId);
+  if (error) {
+    if (error.code === '23503') {
+      throw new AppError(
+        'Este empleado ya tiene pedidos, caja u otra actividad registrada, así que no se puede eliminar sin perder ese historial. Desactívalo en su lugar.',
+        409
+      );
+    }
+    throw new AppError('No se pudo eliminar el usuario.', 500, error.message);
+  }
+
+  // El perfil ya se borró bien — ahora liberamos también la cuenta de
+  // Auth para que el correo quede disponible de nuevo. Si esto falla,
+  // no es grave: crearEmpleado() ya sabe reutilizar cuentas huérfanas.
+  await supabaseAdmin.auth.admin.deleteUser(usuarioId).catch(() => {});
+
+  return { ok: true };
+}
+
+// El admin del negocio (o super_admin) le pone una contraseña nueva a un
+// empleado sin necesitar la vieja — es el "olvidé mi contraseña" de bajo
+// costo mientras no tengamos envío de correos configurado.
+export async function resetearPassword(usuarioId, nuevaPassword) {
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(usuarioId, { password: nuevaPassword });
+  if (error) throw new AppError('No se pudo cambiar la contraseña.', 500, error.message);
+  return { ok: true };
+}

@@ -24,6 +24,16 @@ export const desactivar = asyncHandler(async (req, res) => {
   return response.noContent(res);
 });
 
+export const eliminarPermanente = asyncHandler(async (req, res) => {
+  await usuariosService.eliminarUsuarioPermanente(req.params.id);
+  return response.noContent(res);
+});
+
+export const resetearPassword = asyncHandler(async (req, res) => {
+  await usuariosService.resetearPassword(req.params.id, req.body.password);
+  return response.success(res, null, 'Contraseña actualizada');
+});
+
 export const perfilActual = asyncHandler(async (req, res) => {
   return response.success(res, req.usuario);
 });

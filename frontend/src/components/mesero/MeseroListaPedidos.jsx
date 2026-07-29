@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Plus, Calendar, CheckCircle2, Clock3 } from 'lucide-react';
+import { LogOut, Plus, Calendar, CheckCircle2, Clock3, KeyRound } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { pedidosApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import CambiarPasswordModal from '../common/CambiarPasswordModal.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -23,6 +24,7 @@ export default function MeseroListaPedidos() {
   const [pedidos, setPedidos] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [filtroFecha, setFiltroFecha] = useState('');
+  const [modalPassword, setModalPassword] = useState(false);
 
   const cargar = useCallback(async () => {
     const params = { mesero_id: perfil.id };
@@ -53,10 +55,17 @@ export default function MeseroListaPedidos() {
           <h1 className="font-display text-lg font-bold text-ink-900">Mis pedidos</h1>
           <p className="text-xs text-mist-500">Hola, {perfil?.nombre}</p>
         </div>
-        <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100">
-          <LogOut size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setModalPassword(true)} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100" title="Cambiar contraseña">
+            <KeyRound size={20} />
+          </button>
+          <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100">
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
+
+      {modalPassword && <CambiarPasswordModal onClose={() => setModalPassword(false)} />}
 
       <div className="space-y-3 border-b border-mist-200 bg-white px-4 py-3">
         <div className="flex gap-2 overflow-x-auto">

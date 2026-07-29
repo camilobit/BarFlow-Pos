@@ -68,7 +68,9 @@ export const usuariosApi = {
   listar: (negocio_id) => api.get('/usuarios', { params: { negocio_id } }).then((r) => r.data),
   crear: (payload) => api.post('/usuarios', payload).then((r) => r.data),
   actualizar: (id, payload) => api.patch(`/usuarios/${id}`, payload).then((r) => r.data),
+  resetearPassword: (id, password) => api.patch(`/usuarios/${id}/resetear-password`, { password }).then((r) => r.data),
   desactivar: (id) => api.delete(`/usuarios/${id}`),
+  eliminarPermanente: (id) => api.delete(`/usuarios/${id}/permanente`),
 };
 
 export const negociosApi = {

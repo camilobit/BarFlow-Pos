@@ -1,8 +1,10 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import {
-  LayoutDashboard, Grid3x3, Package, Boxes, Wallet, Users, UserCog, Building2, LogOut, Martini,
+  LayoutDashboard, Grid3x3, Package, Boxes, Wallet, Users, UserCog, Building2, LogOut, Martini, KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import CambiarPasswordModal from '../common/CambiarPasswordModal.jsx';
 
 const NAV = [
   { to: '/admin', label: 'Panel', icon: LayoutDashboard, end: true },
@@ -18,6 +20,7 @@ const NAV = [
 export default function AdminLayout() {
   const { perfil, cerrarSesion } = useAuth();
   const navigate = useNavigate();
+  const [modalPassword, setModalPassword] = useState(false);
 
   async function salir() {
     await cerrarSesion();
@@ -66,11 +69,16 @@ export default function AdminLayout() {
             <p className="text-sm font-semibold text-ink-900">{perfil?.nombre} {perfil?.apellido}</p>
             <p className="text-xs capitalize text-mist-500">{perfil?.rol?.replace('_', ' ')}</p>
           </div>
+          <button onClick={() => setModalPassword(true)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-mist-500 hover:bg-mist-100">
+            <KeyRound size={16} /> Cambiar contraseña
+          </button>
           <button onClick={salir} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-mist-500 hover:bg-mist-100">
             <LogOut size={16} /> Cerrar sesión
           </button>
         </div>
       </aside>
+
+      {modalPassword && <CambiarPasswordModal onClose={() => setModalPassword(false)} />}
 
       <div className="flex-1 lg:ml-60">
         {/* Nav móvil simple */}
