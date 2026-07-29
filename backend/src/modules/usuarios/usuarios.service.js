@@ -11,22 +11,57 @@ export async function listarUsuarios(negocioId) {
   return data;
 }
 
+async function buscarUsuarioAuthPorEmail(email) {
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+  if (error) return null;
+  return data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
+}
+
 /**
  * Crea un empleado: primero en Supabase Auth, luego su perfil en `usuarios`.
  * Si falla el segundo paso, revierte el usuario de Auth para no dejar huérfanos.
+ *
+ * Es resistente a intentos anteriores fallidos: si el correo ya existe en
+ * Supabase Auth (por ejemplo, porque un intento previo se cayó a mitad de
+ * camino) pero NO tiene perfil en `usuarios`, reutiliza esa cuenta en vez
+ * de fallar. Si el correo ya tiene un perfil completo, avisa claramente
+ * en vez de dar un error genérico de Auth.
  */
 export async function crearEmpleado({ negocioId, email, password, nombre, apellido, rol, pin, barraId }) {
+  let authUserId;
+
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
   });
-  if (authError) throw new AppError('No se pudo crear el usuario de autenticación.', 500, authError.message);
+
+  if (authError) {
+    const yaRegistrado = /already been registered|already exists/i.test(authError.message);
+    if (!yaRegistrado) {
+      throw new AppError(`No se pudo crear el usuario de autenticación: ${authError.message}`, 500);
+    }
+
+    const existente = await buscarUsuarioAuthPorEmail(email);
+    if (!existente) {
+      throw new AppError(`Ese correo ya está registrado, pero no se pudo verificar la cuenta: ${authError.message}`, 409);
+    }
+
+    const { data: perfilExistente } = await supabaseAdmin.from('usuarios').select('id').eq('id', existente.id).maybeSingle();
+    if (perfilExistente) {
+      throw new AppError('Ya existe un empleado con ese correo. Usa otro correo o edita el que ya existe.', 409);
+    }
+
+    // Cuenta huérfana de un intento anterior: la reutilizamos.
+    authUserId = existente.id;
+  } else {
+    authUserId = authData.user.id;
+  }
 
   const { data: perfil, error: perfilError } = await supabaseAdmin
     .from('usuarios')
     .insert({
-      id: authData.user.id,
+      id: authUserId,
       negocio_id: negocioId,
       rol,
       nombre,
@@ -39,8 +74,10 @@ export async function crearEmpleado({ negocioId, email, password, nombre, apelli
     .single();
 
   if (perfilError) {
-    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-    throw new AppError('No se pudo crear el perfil del usuario.', 500, perfilError.message);
+    // Solo borramos el usuario de Auth si lo creamos nosotros en esta
+    // misma llamada — si era una cuenta reutilizada, la dejamos intacta.
+    if (!authError) await supabaseAdmin.auth.admin.deleteUser(authUserId);
+    throw new AppError(`No se pudo crear el perfil del usuario: ${perfilError.message}`, 500);
   }
 
   return perfil;
