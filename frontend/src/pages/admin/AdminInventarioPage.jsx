@@ -67,7 +67,8 @@ export default function AdminInventarioPage() {
         <button onClick={() => setModalAbierto(true)} className="btn-primary"><Plus size={16} /> Nuevo insumo</button>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Escritorio: tabla expandible */}
+      <div className="card hidden overflow-hidden md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-mist-200 text-left text-xs uppercase tracking-wide text-mist-400">
@@ -137,6 +138,52 @@ export default function AdminInventarioPage() {
         </table>
       </div>
 
+      {/* Móvil: tarjetas — pensadas para tocar "Asignar" rápido desde el celular */}
+      <div className="space-y-2.5 md:hidden">
+        {insumos.map((i) => {
+          const stockTotal = (i.stock_por_barra || []).reduce((sum, s) => sum + Number(s.stock), 0);
+          const hayAlerta = (i.stock_por_barra || []).some((s) => Number(s.stock) <= Number(s.stock_minimo));
+          const abierto = expandido === i.id;
+          return (
+            <div key={i.id} className="card p-4">
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <p className="font-semibold text-ink-900">{i.nombre}</p>
+                <span className={`shrink-0 text-sm font-bold ${hayAlerta ? 'flex items-center gap-1 text-red-500' : 'text-ink-800'}`}>
+                  {hayAlerta && <TriangleAlert size={14} />}
+                  {stockTotal} {i.unidad}
+                </span>
+              </div>
+
+              {(i.stock_por_barra || []).length > 0 && (
+                <button onClick={() => setExpandido(abierto ? null : i.id)} className="mb-2 flex items-center gap-1 text-xs font-semibold text-petrol-600">
+                  {abierto ? 'Ocultar por barra' : 'Ver por barra'} {abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+              )}
+              {abierto && (
+                <div className="mb-3 grid grid-cols-2 gap-2">
+                  {i.stock_por_barra.map((s) => (
+                    <div key={s.id} className="rounded-xl bg-mist-50 px-3 py-2">
+                      <p className="text-xs font-semibold text-mist-500">{s.barra?.nombre}</p>
+                      <p className={`text-sm font-bold ${Number(s.stock) <= Number(s.stock_minimo) ? 'text-red-500' : 'text-ink-900'}`}>
+                        {s.stock} {i.unidad}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => { setModalAsignar(i); setFormAsignar(FORM_ASIGNAR); }}
+                className="btn-primary w-full !py-2 text-sm"
+              >
+                <PackagePlus size={15} /> Asignar stock
+              </button>
+            </div>
+          );
+        })}
+        {insumos.length === 0 && <p className="py-8 text-center text-sm text-mist-500">Todavía no has creado ningún insumo.</p>}
+      </div>
+
       {modalAbierto && (
         <Modal title="Nuevo insumo" onClose={() => setModalAbierto(false)}>
           <form onSubmit={crearInsumo} className="space-y-3">
@@ -175,7 +222,7 @@ export default function AdminInventarioPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-mist-500">Cantidad a agregar / eliminar con el ( - )</label>
+              <label className="mb-1.5 block text-xs font-semibold text-mist-500">Cantidad a agregar</label>
               <input required type="number" className="input" value={formAsignar.cantidad} onChange={(e) => setFormAsignar({ ...formAsignar, cantidad: e.target.value })} />
               <p className="mt-1 text-xs text-mist-500">Se suma al stock actual de esa barra (usa un número negativo para descontar manualmente).</p>
             </div>

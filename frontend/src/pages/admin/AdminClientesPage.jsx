@@ -78,7 +78,8 @@ export default function AdminClientesPage() {
         <button type="submit" className="btn-secondary">Buscar</button>
       </form>
 
-      <div className="card overflow-x-auto">
+      {/* Escritorio: tabla */}
+      <div className="card hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-mist-200 text-left text-xs uppercase tracking-wide text-mist-400">
@@ -105,6 +106,26 @@ export default function AdminClientesPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Móvil: tarjetas */}
+      <div className="space-y-2.5 md:hidden">
+        {clientes.map((c) => (
+          <div key={c.id} className="card p-4">
+            <div className="mb-1.5 flex items-start justify-between gap-2">
+              <p className="font-semibold text-ink-900">{c.nombre} {c.apellido}</p>
+              <span className={`shrink-0 badge ${NIVEL_COLOR[c.nivel_fidelizacion]}`}>
+                <Trophy size={11} /> {c.nivel_fidelizacion}
+              </span>
+            </div>
+            <p className="mb-2 text-xs text-mist-500">{c.celular || c.correo || 'Sin contacto'}</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-mist-500">{c.visitas} visitas · {c.puntos} pts</span>
+              <span className="font-semibold text-ink-900">{formatoCOP.format(c.consumo_total)}</span>
+            </div>
+          </div>
+        ))}
+        {clientes.length === 0 && <p className="py-8 text-center text-sm text-mist-500">No hay clientes con este filtro.</p>}
       </div>
 
       {modalAbierto && (

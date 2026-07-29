@@ -140,7 +140,7 @@ export default function AdminCajaPage() {
                 <button onClick={() => setModalMovimiento('egreso')} className="btn-secondary"><Minus size={16} /> Registrar egreso</button>
               </div>
 
-              <div className="card overflow-x-auto">
+              <div className="card hidden overflow-x-auto md:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-mist-200 text-left text-xs uppercase tracking-wide text-mist-400">
@@ -161,6 +161,19 @@ export default function AdminCajaPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="space-y-2 md:hidden">
+                {resumen.movimientos.map((m) => (
+                  <div key={m.id} className="card flex items-center justify-between p-3.5">
+                    <div>
+                      <p className="text-sm font-medium capitalize text-ink-900">{m.tipo}</p>
+                      <p className="text-xs text-mist-500">{m.descripcion || '—'} · {new Date(m.created_at).toLocaleTimeString('es-CO')}</p>
+                    </div>
+                    <span className="shrink-0 font-semibold text-ink-900">{formatoCOP.format(m.monto)}</span>
+                  </div>
+                ))}
+                {resumen.movimientos.length === 0 && <p className="py-6 text-center text-sm text-mist-500">Sin movimientos todavía.</p>}
               </div>
             </>
           )}

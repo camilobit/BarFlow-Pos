@@ -185,7 +185,8 @@ export default function AdminProductosPage() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
+      {/* Escritorio: tabla */}
+      <div className="card hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-mist-200 text-left text-xs uppercase tracking-wide text-mist-400">
@@ -221,6 +222,31 @@ export default function AdminProductosPage() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Móvil: tarjetas */}
+      <div className="space-y-2.5 md:hidden">
+        {productos.map((p) => (
+          <div key={p.id} className="card p-4">
+            <div className="mb-1.5 flex items-start justify-between gap-2">
+              <p className="font-semibold text-ink-900">{p.nombre}</p>
+              <button onClick={() => toggleActivo(p)} className={`shrink-0 badge ${p.activo ? 'bg-petrol-100 text-petrol-700' : 'bg-mist-100 text-mist-500'}`}>
+                {p.activo ? 'Activo' : 'Inactivo'}
+              </button>
+            </div>
+            <p className="mb-1 font-display text-lg font-bold text-petrol-600">{formatoCOP.format(p.precio)}</p>
+            <p className="mb-3 text-xs text-mist-500">
+              {p.categoria?.nombre || 'Sin categoría'} · {p.barra?.nombre || 'Sin barra'}
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => abrirEditar(p)} className="btn-secondary flex-1 !py-1.5 text-xs"><Pencil size={13} /> Editar</button>
+              <button onClick={() => eliminarProducto(p)} className="rounded-xl border border-mist-200 p-2 text-mist-400 hover:bg-red-50 hover:text-red-500">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {productos.length === 0 && <p className="py-8 text-center text-sm text-mist-500">Todavía no has creado ningún producto.</p>}
       </div>
 
       {modalProducto && (

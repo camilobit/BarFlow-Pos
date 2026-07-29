@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/common/ProtectedRoute.jsx';
+import { useAuth } from './contexts/AuthContext.jsx';
 
 import LoginPage from './pages/auth/LoginPage.jsx';
 import BarraPage from './pages/barra/BarraPage.jsx';
@@ -17,6 +18,15 @@ import AdminCajaPage from './pages/admin/AdminCajaPage.jsx';
 import AdminClientesPage from './pages/admin/AdminClientesPage.jsx';
 import AdminEquipoPage from './pages/admin/AdminEquipoPage.jsx';
 import AdminNegociosPage from './pages/admin/AdminNegociosPage.jsx';
+
+// El super_admin no opera un negocio específico día a día — solo
+// administra la plataforma. Si intenta entrar a una pantalla operativa
+// (Mesas, Productos, Caja...) por URL directa, lo mandamos a Negocios.
+function SoloAdminNegocio({ children }) {
+  const { perfil } = useAuth();
+  if (perfil?.rol === 'super_admin') return <Navigate to="/admin/negocios" replace />;
+  return children;
+}
 
 export default function App() {
   return (
@@ -65,14 +75,14 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<AdminDashboardPage />} />
-        <Route path="mesas" element={<AdminMesasPage />} />
-        <Route path="barras" element={<AdminBarrasPage />} />
-        <Route path="productos" element={<AdminProductosPage />} />
-        <Route path="inventario" element={<AdminInventarioPage />} />
-        <Route path="caja" element={<AdminCajaPage />} />
-        <Route path="clientes" element={<AdminClientesPage />} />
-        <Route path="equipo" element={<AdminEquipoPage />} />
+        <Route index element={<SoloAdminNegocio><AdminDashboardPage /></SoloAdminNegocio>} />
+        <Route path="mesas" element={<SoloAdminNegocio><AdminMesasPage /></SoloAdminNegocio>} />
+        <Route path="barras" element={<SoloAdminNegocio><AdminBarrasPage /></SoloAdminNegocio>} />
+        <Route path="productos" element={<SoloAdminNegocio><AdminProductosPage /></SoloAdminNegocio>} />
+        <Route path="inventario" element={<SoloAdminNegocio><AdminInventarioPage /></SoloAdminNegocio>} />
+        <Route path="caja" element={<SoloAdminNegocio><AdminCajaPage /></SoloAdminNegocio>} />
+        <Route path="clientes" element={<SoloAdminNegocio><AdminClientesPage /></SoloAdminNegocio>} />
+        <Route path="equipo" element={<SoloAdminNegocio><AdminEquipoPage /></SoloAdminNegocio>} />
         <Route path="negocios" element={<AdminNegociosPage />} />
       </Route>
 

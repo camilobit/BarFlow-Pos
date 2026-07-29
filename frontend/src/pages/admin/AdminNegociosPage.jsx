@@ -88,7 +88,8 @@ export default function AdminNegociosPage() {
         <KpiCard label="Facturación total" value={formatoCOP.format(stats.ingresosTotales)} sub="Suma de ventas de todos tus negocios" icon={CircleDollarSign} accent="ink" />
       </div>
 
-      <div className="card overflow-x-auto">
+      {/* Escritorio: tabla */}
+      <div className="card hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-mist-200 text-left text-xs uppercase tracking-wide text-mist-400">
@@ -140,6 +141,39 @@ export default function AdminNegociosPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Móvil: tarjetas */}
+      <div className="space-y-2.5 md:hidden">
+        {negocios.map((n) => (
+          <div key={n.id} className="card p-4">
+            <div className="mb-1.5 flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-ink-900">{n.nombre}</p>
+                <p className="text-xs text-mist-500">{n.ciudad}, {n.pais}</p>
+              </div>
+              <span className={`shrink-0 badge ${n.estado === 'activo' ? 'bg-petrol-100 text-petrol-700' : n.estado === 'suspendido' ? 'bg-red-100 text-red-600' : 'bg-gold-200 text-gold-600'}`}>
+                {n.estado}
+              </span>
+            </div>
+            <p className="mb-3 font-display text-lg font-bold text-ink-900">{formatoCOP.format(stats.ingresosPorNegocio[n.id] || 0)}</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => togglePago(n)}
+                className={`badge ${n.pagado ? 'bg-petrol-100 text-petrol-700' : 'bg-red-100 text-red-600'}`}
+              >
+                {n.pagado ? 'Pagó' : 'Pendiente'}
+              </button>
+              <button onClick={() => toggleEstado(n)} className="ml-auto text-xs font-semibold text-petrol-600">
+                {n.estado === 'suspendido' ? 'Reactivar' : 'Suspender'}
+              </button>
+              <button onClick={() => eliminar(n)} className="text-mist-400 hover:text-red-500">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {negocios.length === 0 && <p className="py-8 text-center text-sm text-mist-500">Todavía no tienes negocios creados.</p>}
       </div>
 
       {modalAbierto && (

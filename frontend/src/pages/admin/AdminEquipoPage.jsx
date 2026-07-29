@@ -139,7 +139,8 @@ export default function AdminEquipoPage() {
         </div>
       )}
 
-      <div className="card overflow-x-auto">
+      {/* Escritorio: tabla */}
+      <div className="card hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-mist-200 text-left text-xs uppercase tracking-wide text-mist-400">
@@ -196,6 +197,47 @@ export default function AdminEquipoPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Móvil: tarjetas */}
+      <div className="space-y-2.5 md:hidden">
+        {usuarios.map((u) => (
+          <div key={u.id} className="card p-4">
+            <div className="mb-1.5 flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-ink-900">{u.nombre} {u.apellido}</p>
+                <p className="text-xs text-mist-500">{u.email}</p>
+              </div>
+              <span className={`shrink-0 badge ${u.activo ? 'bg-petrol-100 text-petrol-700' : 'bg-mist-100 text-mist-500'}`}>
+                {u.activo ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+            <p className="mb-3 text-xs capitalize text-mist-500">
+              {u.rol.replace('_', ' ')}
+              {u.rol === 'barra' && u.barra?.nombre && ` (${u.barra.nombre})`}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              {u.activo ? (
+                <>
+                  <button onClick={() => setModalResetear(u)} className="flex items-center gap-1 text-xs font-semibold text-petrol-600">
+                    <KeyRound size={13} /> Resetear clave
+                  </button>
+                  <button onClick={() => desactivar(u)} className="text-xs font-semibold text-red-500">Desactivar</button>
+                </>
+              ) : (
+                <button onClick={() => activar(u)} className="text-xs font-semibold text-petrol-600">Activar</button>
+              )}
+              <button onClick={() => eliminarPermanente(u)} className="ml-auto text-mist-400 hover:text-red-500">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {usuarios.length === 0 && (
+          <p className="py-8 text-center text-sm text-mist-500">
+            {negocioActivo ? 'Este negocio todavía no tiene empleados.' : 'Selecciona un negocio para ver su equipo.'}
+          </p>
+        )}
       </div>
 
       {modalAbierto && (

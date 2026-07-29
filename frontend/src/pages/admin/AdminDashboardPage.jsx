@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { TrendingUp, Receipt, Users, Flame, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { dashboardApi } from '../../services/endpoints.js';
 import { descargarCSV } from '../../utils/csv.js';
+import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import KpiCard from '../../components/admin/KpiCard.jsx';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
 
@@ -11,7 +12,13 @@ const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency:
 export default function AdminDashboardPage() {
   const [data, setData] = useState(null);
 
-  useEffect(() => { dashboardApi.resumen().then(setData); }, []);
+  const cargar = useCallback(() => { dashboardApi.resumen().then(setData); }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+  // Cada vez que se cierra una cuenta en cualquier mesa/barra, el panel
+  // se actualiza solo — así "tiempo real" no es solo la barra, también
+  // las métricas que ve el admin.
+  useRealtimeTable({ table: 'pedidos', onChange: cargar });
 
   if (!data) return <LoadingScreen />;
 
