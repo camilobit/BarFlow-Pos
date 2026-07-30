@@ -104,10 +104,10 @@ export default function AdminLayout() {
           </div>
           <button
             onClick={() => setMenuCuentaAbierto(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-mist-100 text-mist-600"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-mist-200 bg-white text-ink-800 shadow-soft active:scale-95"
             aria-label="Mi cuenta"
           >
-            <User size={17} />
+            <User size={18} strokeWidth={2.25} />
           </button>
         </div>
 

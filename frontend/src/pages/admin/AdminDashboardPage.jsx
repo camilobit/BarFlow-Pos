@@ -130,20 +130,12 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* KPIs — carrusel con scroll-snap en celular, grilla en escritorio */}
-      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:pb-0 lg:grid-cols-4">
-        <div className="w-[78%] shrink-0 snap-start sm:w-auto">
-          <KpiCard destacado label="Ventas de hoy" value={formatoCOP.format(ventas.hoy.total)} sub={`${ventas.hoy.numPedidos} pedidos`} icon={TrendingUp} />
-        </div>
-        <div className="w-[78%] shrink-0 snap-start sm:w-auto">
-          <KpiCard label="Ventas del mes" value={formatoCOP.format(ventas.mes.total)} sub={`${ventas.mes.numPedidos} pedidos`} icon={Receipt} accent="gold" />
-        </div>
-        <div className="w-[78%] shrink-0 snap-start sm:w-auto">
-          <KpiCard label="Ticket promedio" value={formatoCOP.format(ventas.mes.ticketPromedio)} sub="Últimos 30 días" icon={Users} accent="ink" />
-        </div>
-        <div className="w-[78%] shrink-0 snap-start sm:w-auto">
-          <KpiCard label="Ventas del año" value={formatoCOP.format(ventas.anio.total)} sub={`${ventas.anio.numPedidos} pedidos`} icon={Flame} accent="petrol" />
-        </div>
+      {/* KPIs — grilla 2×2 en celular (clara, sin ambigüedad de scroll), 4 columnas en escritorio */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <KpiCard destacado label="Ventas de hoy" value={formatoCOP.format(ventas.hoy.total)} sub={`${ventas.hoy.numPedidos} pedidos`} icon={TrendingUp} />
+        <KpiCard label="Ventas del mes" value={formatoCOP.format(ventas.mes.total)} sub={`${ventas.mes.numPedidos} pedidos`} icon={Receipt} accent="gold" />
+        <KpiCard label="Ticket promedio" value={formatoCOP.format(ventas.mes.ticketPromedio)} sub="Últimos 30 días" icon={Users} accent="ink" />
+        <KpiCard label="Ventas del año" value={formatoCOP.format(ventas.anio.total)} sub={`${ventas.anio.numPedidos} pedidos`} icon={Flame} accent="petrol" />
       </div>
 
       {/* Desglose por canal: cuánto llegó por mesero vs. directo en barra */}
@@ -157,18 +149,18 @@ export default function AdminDashboardPage() {
           <div className="bg-petrol-600 transition-all" style={{ width: `${pctMesero}%` }} />
           <div className="bg-gold-500 transition-all" style={{ width: `${pctBarra}%` }} />
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div className="flex items-center gap-3 rounded-xl bg-mist-50 p-3 sm:bg-transparent sm:p-0">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-petrol-50 text-petrol-600"><ClipboardList size={17} /></div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-mist-500">Mesero · {pctMesero}%</p>
               <p className="truncate font-display text-sm font-bold text-ink-900">{formatoCOP.format(porOrigen?.mesero.total || 0)}</p>
               <p className="text-xs text-mist-500">{porOrigen?.mesero.pedidos || 0} pedidos</p>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-3 rounded-xl bg-mist-50 p-3 sm:bg-transparent sm:p-0">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gold-200 text-gold-600"><UtensilsCrossed size={17} /></div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-mist-500">Barra directo · {pctBarra}%</p>
               <p className="truncate font-display text-sm font-bold text-ink-900">{formatoCOP.format(porOrigen?.barra.total || 0)}</p>
               <p className="text-xs text-mist-500">{porOrigen?.barra.pedidos || 0} pedidos</p>

@@ -9,6 +9,7 @@ export default {
           950: '#0B0D0F',
           900: '#12151A',
           800: '#1C2027',
+          700: '#2A2F38',
         },
         // Grises suaves
         mist: {
@@ -18,23 +19,32 @@ export default {
           300: '#D4D4D1',
           400: '#A8A8A3',
           500: '#7C7C77',
+          600: '#635F5A',
+          700: '#4A4744',
         },
         // Azul petróleo (acento principal)
         petrol: {
           50: '#EAF3F3',
           100: '#CFE4E4',
+          200: '#AAD0D0',
           300: '#7FB8B8',
+          400: '#57A0A0',
           500: '#2E6E6E',
           600: '#245959',
           700: '#1B4444',
+          800: '#153535',
           900: '#0F2626',
         },
         // Dorado discreto (acento secundario)
         gold: {
+          50: '#FBF6EB',
+          100: '#F6EBD3',
           200: '#F1E4C3',
+          300: '#E5CD96',
           400: '#D4B36A',
           500: '#C29B4B',
           600: '#A67F38',
+          700: '#84652C',
         },
       },
       fontFamily: {
