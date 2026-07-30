@@ -60,7 +60,7 @@ export const clientesApi = {
 };
 
 export const dashboardApi = {
-  resumen: () => api.get('/dashboard/resumen').then((r) => r.data),
+  resumen: (filtros = {}) => api.get('/dashboard/resumen', { params: filtros }).then((r) => r.data),
 };
 
 export const usuariosApi = {
@@ -91,6 +91,7 @@ export const barrasApi = {
   crear: (payload) => api.post('/barras', payload).then((r) => r.data),
   actualizar: (id, payload) => api.patch(`/barras/${id}`, payload).then((r) => r.data),
   eliminar: (id) => api.delete(`/barras/${id}`),
+  estadisticas: (id, filtros = {}) => api.get(`/barras/${id}/estadisticas`, { params: filtros }).then((r) => r.data),
 };
 
 export const notificacionesApi = {

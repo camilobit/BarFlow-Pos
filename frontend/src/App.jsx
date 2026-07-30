@@ -61,7 +61,7 @@ export default function App() {
       <Route
         path="/mesero/pedido/:pedidoId"
         element={
-          <ProtectedRoute roles={['mesero', 'admin_negocio', 'super_admin']}>
+          <ProtectedRoute roles={['mesero', 'barra', 'admin_negocio', 'super_admin']}>
             <MeseroPedidoDetalle />
           </ProtectedRoute>
         }

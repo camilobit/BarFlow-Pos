@@ -1,5 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound,
+  Plus, BarChart3, ClipboardList, Timer, TrendingUp,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { pedidosApi, barrasApi, cajaApi } from '../../services/endpoints.js';
@@ -20,12 +24,14 @@ const COLOR_ESTADO = {
 
 export default function BarraPage() {
   const { perfil, cerrarSesion } = useAuth();
+  const navigate = useNavigate();
   const [barras, setBarras] = useState([]);
   const [barraId, setBarraId] = useState(null);
   const [items, setItems] = useState([]);
   const [pagosPendientes, setPagosPendientes] = useState([]);
   const [caja, setCaja] = useState(undefined);
-  const [tab, setTab] = useState('pedidos'); // pedidos | pagos | caja
+  const [estadisticas, setEstadisticas] = useState(null);
+  const [tab, setTab] = useState('pedidos'); // pedidos | pagos | caja | estadisticas
   const [cargando, setCargando] = useState(true);
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
   const [modalCerrarCaja, setModalCerrarCaja] = useState(false);
@@ -61,11 +67,21 @@ export default function BarraPage() {
     setCaja(await cajaApi.actual(barraId));
   }, [barraId]);
 
+  const cargarEstadisticas = useCallback(async () => {
+    if (!barraId) return;
+    setEstadisticas(await barrasApi.estadisticas(barraId));
+  }, [barraId]);
+
   useEffect(() => { cargarBarras(); }, [cargarBarras]);
   useEffect(() => { cargarItems(); cargarPagosPendientes(); cargarCaja(); }, [cargarItems, cargarPagosPendientes, cargarCaja]);
+  useEffect(() => { if (tab === 'estadisticas') cargarEstadisticas(); }, [tab, cargarEstadisticas]);
 
   useRealtimeTable({ table: 'pedido_items', filter: barraId ? `barra_id=eq.${barraId}` : undefined, onChange: cargarItems, enabled: !!barraId });
-  useRealtimeTable({ table: 'pedidos', onChange: cargarPagosPendientes, enabled: !!barraId });
+  useRealtimeTable({
+    table: 'pedidos',
+    onChange: () => { cargarPagosPendientes(); if (tab === 'estadisticas') cargarEstadisticas(); },
+    enabled: !!barraId,
+  });
 
   async function avanzarEstado(item) {
     const siguiente = SIGUIENTE_ESTADO[item.estado];
@@ -156,7 +172,7 @@ export default function BarraPage() {
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-ink-800 bg-ink-950 px-5 py-2.5">
+      <div className="flex flex-wrap gap-2 border-b border-ink-800 bg-ink-950 px-5 py-2.5">
         <button onClick={() => setTab('pedidos')} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'pedidos' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           Pedidos
         </button>
@@ -170,6 +186,17 @@ export default function BarraPage() {
         </button>
         <button onClick={() => setTab('caja')} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'caja' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           Caja
+        </button>
+        <button onClick={() => setTab('estadisticas')} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'estadisticas' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
+          <BarChart3 size={13} /> Estadísticas
+        </button>
+
+        {/* Un cliente llega directo a la barra, sin mesero de por medio */}
+        <button
+          onClick={() => navigate('/mesero/pedido/nuevo')}
+          className="ml-auto flex items-center gap-1.5 rounded-lg bg-gold-500 px-3.5 py-1.5 text-xs font-bold text-ink-950"
+        >
+          <Plus size={14} /> Crear pedido
         </button>
       </div>
 
@@ -194,9 +221,16 @@ export default function BarraPage() {
                   <div className="mb-3 flex items-start justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
-                        {item.pedido?.mesa?.nombre || 'Para llevar'}
+                        {item.pedido?.mesa?.nombre || item.pedido?.referencia_mesa || 'Para llevar'}
                       </p>
-                      <p className="text-xs text-mist-500">{item.pedido?.mesero?.nombre}</p>
+                      <p className="flex items-center gap-1 text-xs text-mist-500">
+                        {item.pedido?.origen === 'barra' ? (
+                          <span className="rounded bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gold-400">Barra</span>
+                        ) : (
+                          <span className="rounded bg-petrol-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-petrol-300">Mesero</span>
+                        )}
+                        {item.pedido?.mesero?.nombre}
+                      </p>
                     </div>
                     <span className={`badge border ${COLOR_ESTADO[item.estado]}`}>
                       {item.estado === 'preparando' && <Flame size={12} />}
@@ -236,9 +270,16 @@ export default function BarraPage() {
               {pagosPendientes.map((pedido) => (
                 <article key={pedido.id} className="rounded-2xl border-2 border-gold-500 bg-ink-900 p-4 shadow-lift">
                   <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
-                    {pedido.mesa?.nombre || 'Para llevar'}
+                    {pedido.mesa?.nombre || pedido.referencia_mesa || 'Para llevar'}
                   </p>
-                  <p className="mb-2 text-xs text-mist-500">Mesero: {pedido.mesero?.nombre}</p>
+                  <p className="mb-2 flex items-center gap-1 text-xs text-mist-500">
+                    {pedido.origen === 'barra' ? (
+                      <span className="rounded bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gold-400">Barra</span>
+                    ) : (
+                      <span className="rounded bg-petrol-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-petrol-300">Mesero</span>
+                    )}
+                    {pedido.mesero?.nombre}
+                  </p>
                   <p className="mb-1 font-display text-xl font-bold text-white">{formatoCOP.format(pedido.total)}</p>
                   <p className="mb-3 text-xs capitalize text-gold-400">{pedido.metodo_pago}</p>
                   <button onClick={() => confirmarPago(pedido)} className="btn-gold w-full">
@@ -270,6 +311,41 @@ export default function BarraPage() {
             </div>
           </div>
         )}
+
+        {tab === 'estadisticas' && (
+          !estadisticas ? (
+            <LoadingScreen label="Cargando estadísticas…" />
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <TarjetaStat icono={ClipboardList} etiqueta="Desde meseros" valor={estadisticas.pedidosDesdeMesero} />
+                <TarjetaStat icono={UtensilsCrossed} etiqueta="Creados en barra" valor={estadisticas.pedidosDesdeBarra} acento="gold" />
+                <TarjetaStat icono={TrendingUp} etiqueta="Ventas totales" valor={formatoCOP.format(estadisticas.ventasTotales)} />
+                <TarjetaStat icono={TrendingUp} etiqueta="Ventas de hoy" valor={formatoCOP.format(estadisticas.ventasHoy)} acento="gold" />
+                <TarjetaStat icono={BarChart3} etiqueta="Ticket promedio" valor={formatoCOP.format(estadisticas.ticketPromedio)} />
+                <TarjetaStat icono={Timer} etiqueta="Despacho promedio" valor={`${estadisticas.tiempoPromedioDespachoMinutos} min`} />
+                <TarjetaStat icono={Clock} etiqueta="Pendientes" valor={estadisticas.pedidosPendientes} />
+                <TarjetaStat icono={CheckCircle2} etiqueta="Entregados" valor={estadisticas.pedidosEntregados} acento="gold" />
+              </div>
+
+              <div className="rounded-2xl border border-ink-800 bg-ink-900 p-5">
+                <h2 className="mb-4 font-display text-sm font-bold text-white">Productos más vendidos en esta barra</h2>
+                <div className="space-y-2.5">
+                  {estadisticas.productosMasVendidos.length === 0 ? (
+                    <p className="text-sm text-mist-500">Aún no hay ventas registradas.</p>
+                  ) : (
+                    estadisticas.productosMasVendidos.map((p, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm">
+                        <span className="text-mist-300">{p.nombre}</span>
+                        <span className="font-semibold text-petrol-300">{p.unidades} uds · {formatoCOP.format(p.ingresos)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        )}
       </main>
 
       {modalAbrirCaja && (
@@ -297,6 +373,18 @@ export default function BarraPage() {
       )}
 
       {modalPassword && <CambiarPasswordModal onClose={() => setModalPassword(false)} />}
+    </div>
+  );
+}
+
+function TarjetaStat({ icono: Icono, etiqueta, valor, acento = 'petrol' }) {
+  return (
+    <div className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-mist-400">{etiqueta}</span>
+        <Icono size={15} className={acento === 'gold' ? 'text-gold-400' : 'text-petrol-400'} />
+      </div>
+      <p className="font-display text-lg font-bold text-white">{valor}</p>
     </div>
   );
 }

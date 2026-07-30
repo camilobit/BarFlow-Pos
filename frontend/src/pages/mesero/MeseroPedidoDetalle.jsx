@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, Send, Receipt, ShoppingCart, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { pedidosApi, productosApi, barrasApi } from '../../services/endpoints.js';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
 import CerrarCuentaModal from '../../components/mesero/CerrarCuentaModal.jsx';
@@ -25,7 +26,11 @@ function barraMasFrecuente(pedido) {
 export default function MeseroPedidoDetalle() {
   const { pedidoId } = useParams();
   const navigate = useNavigate();
+  const { perfil } = useAuth();
   const esNuevo = pedidoId === 'nuevo';
+  // La barra reutiliza esta misma pantalla ("exactamente el mismo
+  // proceso que hace un mesero") — solo cambia a dónde vuelve al salir.
+  const rutaVolver = perfil?.rol === 'barra' ? '/barra' : '/mesero';
 
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -127,7 +132,7 @@ export default function MeseroPedidoDetalle() {
     <div className="flex min-h-screen flex-col bg-mist-50">
       <header className="sticky top-0 z-10 border-b border-mist-200 bg-white px-4 py-3.5">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/mesero')} className="rounded-xl p-2 hover:bg-mist-100">
+          <button onClick={() => navigate(rutaVolver)} className="rounded-xl p-2 hover:bg-mist-100">
             <ArrowLeft size={20} />
           </button>
           <div className="flex-1">
@@ -246,7 +251,7 @@ export default function MeseroPedidoDetalle() {
           barras={barras}
           barraSugerida={barraMasFrecuente(pedido)}
           onClose={() => setModalCierre(false)}
-          onSuccess={() => navigate('/mesero')}
+          onSuccess={() => navigate(rutaVolver)}
         />
       )}
     </div>

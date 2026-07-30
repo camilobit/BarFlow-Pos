@@ -5,6 +5,10 @@ import * as pedidosService from './pedidos.service.js';
 
 export const crear = asyncHandler(async (req, res) => {
   const { mesa_id, referencia_mesa, cliente_id, observaciones, items } = req.body;
+  // El origen lo decide el backend según quién está autenticado, no el
+  // cliente — así nadie puede falsear si el pedido vino de un mesero o
+  // se hizo directo en la barra.
+  const origen = req.usuario.rol === 'barra' ? 'barra' : 'mesero';
   const pedido = await pedidosService.crearPedido({
     negocioId: req.usuario.negocio_id,
     meseroId: req.usuario.id,
@@ -13,6 +17,7 @@ export const crear = asyncHandler(async (req, res) => {
     clienteId: cliente_id,
     observaciones,
     items,
+    origen,
   });
   await registrarAuditoria({
     negocioId: req.usuario.negocio_id,
@@ -20,17 +25,20 @@ export const crear = asyncHandler(async (req, res) => {
     accion: 'crear_pedido',
     entidad: 'pedido',
     entidadId: pedido.id,
+    detalle: { origen },
   });
-  return response.created(res, pedido, 'Pedido creado y enviado a barra');
+  return response.created(res, pedido, origen === 'barra' ? 'Pedido creado en barra' : 'Pedido creado y enviado a barra');
 });
 
 export const listar = asyncHandler(async (req, res) => {
-  const { estado, mesa_id, mesero_id, desde, hasta } = req.query;
+  const { estado, mesa_id, mesero_id, origen, barra_id, desde, hasta } = req.query;
   const pedidos = await pedidosService.listarPedidos({
     negocioId: req.usuario.negocio_id,
     estado,
     mesaId: mesa_id,
     meseroId: mesero_id,
+    origen,
+    barraId: barra_id,
     desde,
     hasta,
   });

@@ -17,7 +17,7 @@ router.use(requireAuth);
 router.get('/pagos-por-verificar', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.pagosPorVerificar);
 router.get('/mesa/:mesaId/historial', ctrl.historialPorMesa);
 router.get('/barra/:barraId', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.pedidosPorBarra);
-router.post('/combinar-mesas', requireRole('mesero', 'admin_negocio', 'super_admin'), ctrl.combinarMesas);
+router.post('/combinar-mesas', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), ctrl.combinarMesas);
 router.patch(
   '/items/:itemId/estado',
   requireRole('barra', 'mesero', 'admin_negocio', 'super_admin'),
@@ -28,12 +28,12 @@ router.patch(
 router.get('/', ctrl.listar);
 router.get('/:id', ctrl.obtener);
 
-router.post('/', requireRole('mesero', 'admin_negocio', 'super_admin'), validate(crearPedidoSchema), ctrl.crear);
-router.post('/:id/items', requireRole('mesero', 'admin_negocio', 'super_admin'), validate(agregarItemsSchema), ctrl.agregarItems);
-router.delete('/:id/items/:itemId', requireRole('mesero', 'admin_negocio', 'super_admin'), ctrl.quitarItem);
-router.patch('/:id/mesa', requireRole('mesero', 'admin_negocio', 'super_admin'), ctrl.cambiarMesa);
-router.post('/:id/cerrar-cuenta', requireRole('mesero', 'admin_negocio', 'super_admin'), validate(cerrarCuentaSchema), ctrl.cerrarCuenta);
-router.post('/:id/dividir', requireRole('mesero', 'admin_negocio', 'super_admin'), validate(dividirCuentaSchema), ctrl.dividirCuenta);
+router.post('/', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(crearPedidoSchema), ctrl.crear);
+router.post('/:id/items', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(agregarItemsSchema), ctrl.agregarItems);
+router.delete('/:id/items/:itemId', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), ctrl.quitarItem);
+router.patch('/:id/mesa', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), ctrl.cambiarMesa);
+router.post('/:id/cerrar-cuenta', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(cerrarCuentaSchema), ctrl.cerrarCuenta);
+router.post('/:id/dividir', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(dividirCuentaSchema), ctrl.dividirCuenta);
 router.patch('/:id/verificar-pago', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.verificarPago);
 
 export default router;

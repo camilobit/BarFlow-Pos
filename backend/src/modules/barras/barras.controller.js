@@ -22,3 +22,9 @@ export const eliminar = asyncHandler(async (req, res) => {
   await barrasService.eliminarBarra(req.params.id);
   return response.noContent(res);
 });
+
+export const estadisticas = asyncHandler(async (req, res) => {
+  const { desde, hasta } = req.query;
+  const stats = await barrasService.estadisticasBarra(req.usuario.negocio_id, req.params.id, { desde, hasta });
+  return response.success(res, stats);
+});

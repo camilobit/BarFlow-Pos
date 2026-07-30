@@ -13,7 +13,7 @@ const SELECT_PEDIDO_COMPLETO = `
   )
 `;
 
-export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa, clienteId, observaciones, items }) {
+export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa, clienteId, observaciones, items, origen }) {
   // 1) Crear el pedido base
   const { data: pedido, error: errorPedido } = await supabaseAdmin
     .from('pedidos')
@@ -24,6 +24,7 @@ export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa,
       referencia_mesa: referenciaMesa || null,
       cliente_id: clienteId || null,
       observaciones: observaciones || null,
+      origen: origen === 'barra' ? 'barra' : 'mesero',
       estado: 'pendiente',
     })
     .select()
@@ -63,7 +64,7 @@ export async function obtenerPedidoPorId(pedidoId) {
   return data;
 }
 
-export async function listarPedidos({ negocioId, estado, mesaId, meseroId, desde, hasta }) {
+export async function listarPedidos({ negocioId, estado, mesaId, meseroId, origen, barraId, desde, hasta }) {
   let query = supabaseAdmin
     .from('pedidos')
     .select(SELECT_PEDIDO_COMPLETO)
@@ -73,6 +74,8 @@ export async function listarPedidos({ negocioId, estado, mesaId, meseroId, desde
   if (estado) query = query.eq('estado', estado);
   if (mesaId) query = query.eq('mesa_id', mesaId);
   if (meseroId) query = query.eq('mesero_id', meseroId);
+  if (origen) query = query.eq('origen', origen);
+  if (barraId) query = query.eq('barra_id', barraId);
   if (desde) query = query.gte('created_at', desde);
   if (hasta) query = query.lte('created_at', hasta);
 
@@ -239,6 +242,7 @@ export async function dividirCuenta(pedidoId, gruposDeItemIds) {
         mesero_id: pedidoOriginal.mesero_id,
         mesa_id: pedidoOriginal.mesa_id,
         cliente_id: pedidoOriginal.cliente_id,
+        origen: pedidoOriginal.origen,
         estado: 'listo',
       })
       .select()
@@ -278,7 +282,7 @@ export async function pedidosPorBarra(negocioId, barraId) {
     .select(`
       id, cantidad, observaciones, estado, created_at,
       producto:productos(nombre),
-      pedido:pedidos!inner(id, negocio_id, estado, created_at, mesa:mesas(nombre), mesero:usuarios!pedidos_mesero_id_fkey(nombre))
+      pedido:pedidos!inner(id, negocio_id, estado, created_at, origen, mesa:mesas(nombre), mesero:usuarios!pedidos_mesero_id_fkey(nombre))
     `)
     .eq('barra_id', barraId)
     .eq('pedido.negocio_id', negocioId)
@@ -286,5 +290,27 @@ export async function pedidosPorBarra(negocioId, barraId) {
     .order('created_at', { ascending: true });
 
   if (error) throw new AppError('No se pudieron obtener los pedidos de la barra.', 500, error.message);
+  return data;
+}
+
+// Todos los ítems que ha despachado una barra (para sus propias
+// estadísticas de rendimiento: origen, tiempo de despacho, productos).
+export async function itemsPorBarraParaEstadisticas(negocioId, barraId, { desde, hasta } = {}) {
+  let query = supabaseAdmin
+    .from('pedido_items')
+    .select(`
+      id, cantidad, precio_unitario, estado, created_at, updated_at, producto_id,
+      producto:productos(nombre),
+      pedido:pedidos!inner(id, negocio_id, estado, origen, total, cerrado_at, created_at)
+    `)
+    .eq('barra_id', barraId)
+    .eq('pedido.negocio_id', negocioId)
+    .neq('estado', 'cancelado');
+
+  if (desde) query = query.gte('created_at', desde);
+  if (hasta) query = query.lte('created_at', hasta);
+
+  const { data, error } = await query;
+  if (error) throw new AppError('No se pudieron obtener las estadísticas de la barra.', 500, error.message);
   return data;
 }
