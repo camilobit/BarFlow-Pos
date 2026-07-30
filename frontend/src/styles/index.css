@@ -5,24 +5,55 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+  /* Protección global: ningún elemento (carruseles, tablas anchas,
+     sangrías de diseño) puede empujar la página entera a scrollear de
+     lado — cada uno debe manejar su propio overflow-x internamente. */
+  html, body, #root {
+    overflow-x: hidden;
+    max-width: 100vw;
   }
   body {
     font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
   h1, h2, h3, h4 {
     font-family: 'Manrope', 'Inter', system-ui, sans-serif;
   }
+  /* Foco visible consistente y accesible en toda la app — solo con teclado,
+     no al hacer click con el mouse (evita el "halo" molesto en cada tap). */
+  :focus-visible {
+    outline: 2px solid theme('colors.petrol.500');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Los inputs ya muestran su propio anillo de foco (ring), así que no
+     necesitan además el outline genérico encima. */
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: none;
+  }
 }
 
 @layer components {
+  /* ------------------------------------------------------------------
+     Botones — con tamaño mínimo de toque (44px) en la variante base,
+     pensado para usarse todo el día desde el celular sin fallar el tap.
+     ------------------------------------------------------------------ */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-sm {
+    @apply min-h-[36px] rounded-lg px-3 py-1.5 text-xs;
+  }
+  .btn-lg {
+    @apply min-h-[52px] rounded-2xl px-5 py-3.5 text-base;
   }
   .btn-primary {
     @apply btn bg-petrol-600 text-white hover:bg-petrol-700 shadow-soft;
   }
   .btn-secondary {
-    @apply btn bg-white text-ink-900 border border-mist-200 hover:bg-mist-50;
+    @apply btn bg-white text-ink-900 border border-mist-200 hover:bg-mist-50 hover:border-mist-300;
   }
   .btn-gold {
     @apply btn bg-gold-500 text-ink-950 hover:bg-gold-600;
@@ -33,18 +64,104 @@
   .btn-danger {
     @apply btn bg-red-500 text-white hover:bg-red-600;
   }
+  /* Botón icono solo (papelera, lápiz, etc.) — 40px mínimo, siempre con
+     aria-label en el JSX para lectores de pantalla. */
+  .btn-icon {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl text-mist-400 transition-colors hover:bg-mist-100 hover:text-ink-800 active:scale-95 disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-icon-danger {
+    @apply btn-icon hover:bg-red-50 hover:text-red-500;
+  }
+
+  /* ------------------------------------------------------------------
+     Cards
+     ------------------------------------------------------------------ */
   .card {
     @apply bg-white rounded-2xl shadow-card border border-mist-100;
   }
-  .input {
-    @apply w-full rounded-xl border border-mist-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-petrol-500 focus:ring-2 focus:ring-petrol-100;
+  .card-hover {
+    @apply card transition-shadow hover:shadow-lift;
   }
+  .card-tap {
+    @apply card-hover text-left transition-transform active:scale-[0.98];
+  }
+
+  /* ------------------------------------------------------------------
+     Formularios
+     ------------------------------------------------------------------ */
+  .label {
+    @apply mb-1.5 block text-xs font-semibold text-mist-500;
+  }
+  .input {
+    @apply w-full min-h-[44px] rounded-xl border border-mist-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition-colors placeholder:text-mist-400 focus:border-petrol-500 focus:ring-2 focus:ring-petrol-100 disabled:cursor-not-allowed disabled:bg-mist-50 disabled:text-mist-400;
+  }
+  .input-error {
+    @apply border-red-300 focus:border-red-500 focus:ring-red-100;
+  }
+  .select {
+    @apply input appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237C7C77' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-size: 16px;
+  }
+  .help-text {
+    @apply mt-1 text-xs text-mist-500;
+  }
+  .error-text {
+    @apply mt-1 text-xs font-medium text-red-500;
+  }
+
+  /* ------------------------------------------------------------------
+     Badges
+     ------------------------------------------------------------------ */
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
   }
+
+  /* ------------------------------------------------------------------
+     Skeleton loaders — shimmer suave, para listas/cards mientras cargan
+     en vez de un spinner genérico (mejor percepción de velocidad).
+     ------------------------------------------------------------------ */
+  .skeleton {
+    @apply relative overflow-hidden rounded-xl bg-mist-100;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+    animation: skeleton-shimmer 1.6s infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* Utilidad accesible: visible solo para lectores de pantalla */
+.sr-only-focusable:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Scrollbars discretos */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #D4D4D1; border-radius: 999px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Respeta si el usuario pidió menos animaciones (accesibilidad) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

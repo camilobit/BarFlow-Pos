@@ -5,7 +5,7 @@ import { mesasApi, negociosApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import Modal from '../../components/common/Modal.jsx';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import { SkeletonKpis, SkeletonCard } from '../../components/common/Skeleton.jsx';
 
 const ESTILO_ESTADO = {
   libre: 'bg-mist-100 text-ink-800',
@@ -61,7 +61,7 @@ export default function AdminMesasPage() {
     }
   }
 
-  if (!mesas || !negocioConfig) return <LoadingScreen />;
+  if (!mesas || !negocioConfig) return <div className="space-y-6"><SkeletonKpis cantidad={2} /><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}</div></div>;
 
   const modoFijo = negocioConfig.modo_mesas === 'fijo';
 

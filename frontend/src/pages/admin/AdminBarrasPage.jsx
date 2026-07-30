@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Power } from 'lucide-react';
+import { Plus, Pencil, Trash2, Power, Martini } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { barrasApi } from '../../services/endpoints.js';
 import Modal from '../../components/common/Modal.jsx';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import { useConfirm } from '../../hooks/useConfirm.js';
+import EmptyState from '../../components/common/EmptyState.jsx';
+import { SkeletonLista } from '../../components/common/Skeleton.jsx';
 
 const FORM_VACIO = { nombre: '', descripcion: '' };
 
@@ -12,6 +15,7 @@ export default function AdminBarrasPage() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState(null); // barra en edición, o null si es nueva
   const [form, setForm] = useState(FORM_VACIO);
+  const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
 
   const cargar = useCallback(async () => setBarras(await barrasApi.listar()), []);
   useEffect(() => { cargar(); }, [cargar]);
@@ -51,7 +55,13 @@ export default function AdminBarrasPage() {
   }
 
   async function eliminar(barra) {
-    if (!confirm(`¿Eliminar "${barra.nombre}"? Solo se puede si nunca tuvo pedidos.`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar barra',
+      mensaje: `¿Eliminar "${barra.nombre}"? Solo se puede si nunca tuvo pedidos asociados.`,
+      textoConfirmar: 'Eliminar',
+      peligroso: true,
+    });
+    if (!ok) return;
     try {
       await barrasApi.eliminar(barra.id);
       toast.success('Barra eliminada');
@@ -61,7 +71,7 @@ export default function AdminBarrasPage() {
     }
   }
 
-  if (!barras) return <LoadingScreen />;
+  if (!barras) return <SkeletonLista filas={3} />;
 
   return (
     <div className="space-y-6">
@@ -86,36 +96,44 @@ export default function AdminBarrasPage() {
               </span>
             </div>
             <div className="mt-3 flex gap-2">
-              <button onClick={() => abrirEditar(b)} className="btn-secondary !px-2.5 !py-1.5 text-xs"><Pencil size={13} /> Editar</button>
-              <button onClick={() => toggleActiva(b)} className="btn-secondary !px-2.5 !py-1.5 text-xs">
+              <button onClick={() => abrirEditar(b)} className="btn-secondary btn-sm"><Pencil size={13} /> Editar</button>
+              <button onClick={() => toggleActiva(b)} className="btn-secondary btn-sm">
                 <Power size={13} /> {b.activa ? 'Desactivar' : 'Activar'}
               </button>
-              <button onClick={() => eliminar(b)} className="ml-auto rounded-lg p-1.5 text-mist-400 hover:bg-red-50 hover:text-red-500">
+              <button onClick={() => eliminar(b)} className="btn-icon-danger ml-auto" aria-label={`Eliminar barra ${b.nombre}`}>
                 <Trash2 size={15} />
               </button>
             </div>
           </div>
         ))}
-        {barras.length === 0 && (
-          <p className="col-span-full py-10 text-center text-sm text-mist-500">Todavía no has creado ninguna barra.</p>
-        )}
       </div>
+
+      {barras.length === 0 && (
+        <EmptyState
+          icono={Martini}
+          titulo="Todavía no has creado ninguna barra"
+          descripcion="Crea la primera para empezar a asignarle inventario, caja y productos."
+          accion={{ etiqueta: 'Nueva barra', onClick: abrirNueva }}
+        />
+      )}
 
       {modalAbierto && (
         <Modal title={editando ? `Editar "${editando.nombre}"` : 'Nueva barra'} onClose={() => setModalAbierto(false)}>
           <form onSubmit={guardar} className="space-y-3">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-mist-500">Nombre</label>
-              <input required className="input" placeholder="Ej. Vortex, Cantina, VIP" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+              <label className="label" htmlFor="barra-nombre">Nombre</label>
+              <input id="barra-nombre" required className="input" placeholder="Ej. Vortex, Cantina, VIP" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-mist-500">Descripción (opcional)</label>
-              <input className="input" value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
+              <label className="label" htmlFor="barra-descripcion">Descripción (opcional)</label>
+              <input id="barra-descripcion" className="input" value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
             </div>
             <button type="submit" className="btn-primary w-full">{editando ? 'Guardar cambios' : 'Crear barra'}</button>
           </form>
         </Modal>
       )}
+
+      {estaAbierto && <ConfirmDialog {...opciones} onConfirmar={onConfirmar} onCancelar={onCancelar} />}
     </div>
   );
 }

@@ -23,13 +23,21 @@ function Root() {
         <App />
         <Toaster
           position="top-center"
+          gutter={8}
+          containerStyle={{ top: 'max(1rem, env(safe-area-inset-top))' }}
           toastOptions={{
+            duration: 3500,
             style: {
               borderRadius: '0.875rem',
               background: '#12151A',
               color: '#FAFAF9',
               fontSize: '0.875rem',
+              padding: '0.75rem 1rem',
+              maxWidth: '92vw',
+              boxShadow: '0 16px 40px -12px rgba(18, 21, 26, 0.35)',
             },
+            success: { iconTheme: { primary: '#2E6E6E', secondary: '#FAFAF9' } },
+            error: { iconTheme: { primary: '#EF4444', secondary: '#FAFAF9' }, duration: 4500 },
           }}
         />
       </AuthProvider>

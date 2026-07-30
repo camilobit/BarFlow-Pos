@@ -3,7 +3,7 @@ import { Plus, TriangleAlert, PackagePlus, ChevronDown, ChevronUp } from 'lucide
 import toast from 'react-hot-toast';
 import { productosApi, barrasApi } from '../../services/endpoints.js';
 import Modal from '../../components/common/Modal.jsx';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import { SkeletonLista } from '../../components/common/Skeleton.jsx';
 
 const FORM_VACIO = { nombre: '', unidad: 'unidad', costo_unitario: '' };
 const FORM_ASIGNAR = { barra_id: '', cantidad: '', stock_minimo: '' };
@@ -55,7 +55,7 @@ export default function AdminInventarioPage() {
     }
   }
 
-  if (!insumos) return <LoadingScreen />;
+  if (!insumos) return <SkeletonLista filas={4} />;
 
   return (
     <div className="space-y-6">

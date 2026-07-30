@@ -10,6 +10,7 @@ import { pedidosApi, barrasApi, cajaApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
 import Modal from '../../components/common/Modal.jsx';
+import EmptyState from '../../components/common/EmptyState.jsx';
 import CambiarPasswordModal from '../../components/common/CambiarPasswordModal.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -31,6 +32,7 @@ export default function BarraPage() {
   const [pagosPendientes, setPagosPendientes] = useState([]);
   const [caja, setCaja] = useState(undefined);
   const [estadisticas, setEstadisticas] = useState(null);
+  const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
   const [tab, setTab] = useState('pedidos'); // pedidos | pagos | caja | estadisticas
   const [cargando, setCargando] = useState(true);
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
@@ -69,7 +71,27 @@ export default function BarraPage() {
 
   const cargarEstadisticas = useCallback(async () => {
     if (!barraId) return;
-    setEstadisticas(await barrasApi.estadisticas(barraId));
+    setCargandoEstadisticas(true);
+    try {
+      setEstadisticas(await barrasApi.estadisticas(barraId));
+    } catch (err) {
+      toast.error(err.message || 'No se pudieron cargar las estadísticas.');
+      // Igual mostramos la pantalla vacía en vez de dejar el spinner infinito
+      setEstadisticas({
+        pedidosDesdeMesero: 0,
+        pedidosDesdeBarra: 0,
+        totalPedidos: 0,
+        ventasTotales: 0,
+        ventasHoy: 0,
+        ticketPromedio: 0,
+        pedidosPendientes: 0,
+        pedidosEntregados: 0,
+        tiempoPromedioDespachoMinutos: 0,
+        productosMasVendidos: [],
+      });
+    } finally {
+      setCargandoEstadisticas(false);
+    }
   }, [barraId]);
 
   useEffect(() => { cargarBarras(); }, [cargarBarras]);
@@ -162,17 +184,17 @@ export default function BarraPage() {
           ) : (
             barras[0] && <span className="rounded-xl bg-ink-800 px-3.5 py-2 text-xs font-semibold text-white">{barras[0].nombre}</span>
           )}
-          <button onClick={() => setModalPassword(true)} className="ml-2 rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white" title="Cambiar contraseña">
+          <button onClick={() => setModalPassword(true)} className="ml-2 rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white" aria-label="Cambiar contraseña">
             <KeyRound size={18} />
           </button>
-          <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white">
+          <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-400 hover:bg-ink-800 hover:text-white" aria-label="Cerrar sesión">
             <LogOut size={18} />
           </button>
         </div>
       </header>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-ink-800 bg-ink-950 px-5 py-2.5">
+      <div className="flex flex-wrap gap-2 border-b border-ink-800 bg-ink-950 px-5 py-2.5" role="tablist" aria-label="Secciones de la barra">
         <button onClick={() => setTab('pedidos')} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'pedidos' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           Pedidos
         </button>
@@ -205,10 +227,7 @@ export default function BarraPage() {
           cargando ? (
             <LoadingScreen label="Cargando pedidos…" />
           ) : visibles.length === 0 ? (
-            <div className="flex h-[50vh] flex-col items-center justify-center text-mist-500">
-              <CheckCircle2 size={40} className="mb-3 opacity-40" />
-              <p className="text-sm">No hay pedidos pendientes por ahora.</p>
-            </div>
+<EmptyState icono={CheckCircle2} titulo="No hay pedidos pendientes por ahora" oscuro />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visibles.map((item) => (
@@ -261,10 +280,7 @@ export default function BarraPage() {
 
         {tab === 'pagos' && (
           pagosPendientes.length === 0 ? (
-            <div className="flex h-[50vh] flex-col items-center justify-center text-mist-500">
-              <BadgeCheck size={40} className="mb-3 opacity-40" />
-              <p className="text-sm">No hay pagos pendientes por confirmar.</p>
-            </div>
+<EmptyState icono={BadgeCheck} titulo="No hay pagos pendientes por confirmar" oscuro />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {pagosPendientes.map((pedido) => (
@@ -313,10 +329,18 @@ export default function BarraPage() {
         )}
 
         {tab === 'estadisticas' && (
-          !estadisticas ? (
+          cargandoEstadisticas && !estadisticas ? (
             <LoadingScreen label="Cargando estadísticas…" />
+          ) : !estadisticas ? (
+<EmptyState icono={ClipboardList} titulo="No hay pedidos en este momento" oscuro />
           ) : (
             <div className="space-y-5">
+              {estadisticas.totalPedidos === 0 && (
+                <div className="flex items-center gap-2 rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3 text-sm text-mist-400">
+                  <ClipboardList size={16} />
+                  No hay pedidos en este momento. Las estadísticas se irán llenando a medida que lleguen ventas.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <TarjetaStat icono={ClipboardList} etiqueta="Desde meseros" valor={estadisticas.pedidosDesdeMesero} />
                 <TarjetaStat icono={UtensilsCrossed} etiqueta="Creados en barra" valor={estadisticas.pedidosDesdeBarra} acento="gold" />

@@ -3,7 +3,7 @@ import { Lock, Unlock, Plus, Minus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cajaApi, barrasApi } from '../../services/endpoints.js';
 import Modal from '../../components/common/Modal.jsx';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import { SkeletonKpis } from '../../components/common/Skeleton.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -76,7 +76,7 @@ export default function AdminCajaPage() {
     }
   }
 
-  if (barras === null || caja === undefined) return <LoadingScreen />;
+  if (barras === null || caja === undefined) return <SkeletonKpis cantidad={3} />;
 
   const nombreBarraActiva = barras.find((b) => b.id === barraActiva)?.nombre;
 

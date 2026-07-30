@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Minus, Send, Receipt, ShoppingCart, X } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Send, Receipt, ShoppingCart, X, Search, PackageSearch } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { pedidosApi, productosApi, barrasApi } from '../../services/endpoints.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import EmptyState from '../../components/common/EmptyState.jsx';
 import CerrarCuentaModal from '../../components/mesero/CerrarCuentaModal.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -36,6 +37,7 @@ export default function MeseroPedidoDetalle() {
   const [categorias, setCategorias] = useState([]);
   const [barras, setBarras] = useState([]);
   const [categoriaActiva, setCategoriaActiva] = useState(null);
+  const [busqueda, setBusqueda] = useState('');
   const [pedido, setPedido] = useState(null);
   const [referencia, setReferencia] = useState('');
   const [carrito, setCarrito] = useState([]);
@@ -123,16 +125,19 @@ export default function MeseroPedidoDetalle() {
     }
   }
 
-  if (cargando) return <LoadingScreen />;
+  if (cargando) return <LoadingScreen label="Cargando catálogo…" />;
 
-  const productosFiltrados = productos.filter((p) => p.categoria_id === categoriaActiva);
+  const buscando = busqueda.trim().length > 0;
+  const productosFiltrados = buscando
+    ? productos.filter((p) => p.nombre.toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : productos.filter((p) => p.categoria_id === categoriaActiva);
   const totalPedido = pedido?.subtotal || 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-mist-50">
       <header className="sticky top-0 z-10 border-b border-mist-200 bg-white px-4 py-3.5">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(rutaVolver)} className="rounded-xl p-2 hover:bg-mist-100">
+          <button onClick={() => navigate(rutaVolver)} className="btn-icon shrink-0" aria-label="Volver">
             <ArrowLeft size={20} />
           </button>
           <div className="flex-1">
@@ -151,36 +156,68 @@ export default function MeseroPedidoDetalle() {
             onChange={(e) => setReferencia(e.target.value)}
           />
         )}
+
+        <div className="relative mt-3">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mist-400" />
+          <label htmlFor="buscar-producto" className="sr-only-focusable">Buscar producto</label>
+          <input
+            id="buscar-producto"
+            className="input pl-9 pr-9"
+            placeholder="Buscar producto…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          {buscando && (
+            <button
+              onClick={() => setBusqueda('')}
+              className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-mist-400 hover:bg-mist-100 hover:text-ink-800"
+              aria-label="Limpiar búsqueda"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
       </header>
 
-      {/* Categorías */}
-      <div className="flex gap-2 overflow-x-auto border-b border-mist-200 bg-white px-4 py-3">
-        {categorias.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setCategoriaActiva(c.id)}
-            className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-              categoriaActiva === c.id ? 'bg-petrol-600 text-white' : 'bg-mist-100 text-ink-800'
-            }`}
-          >
-            {c.nombre}
-          </button>
-        ))}
-      </div>
-
-      <main className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {productosFiltrados.map((p) => (
+      {/* Categorías (ocultas mientras se busca, para no confundir) */}
+      {!buscando && (
+        <div className="flex gap-2 overflow-x-auto border-b border-mist-200 bg-white px-4 py-3" role="tablist" aria-label="Categorías">
+          {categorias.map((c) => (
             <button
-              key={p.id}
-              onClick={() => agregarAlCarrito(p)}
-              className="card flex flex-col items-start gap-1 p-3.5 text-left active:scale-[0.97]"
+              key={c.id}
+              role="tab"
+              aria-selected={categoriaActiva === c.id}
+              onClick={() => setCategoriaActiva(c.id)}
+              className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+                categoriaActiva === c.id ? 'bg-petrol-600 text-white' : 'bg-mist-100 text-ink-800'
+              }`}
             >
-              <span className="text-sm font-semibold text-ink-900">{p.nombre}</span>
-              <span className="text-xs font-medium text-petrol-600">{formatoCOP.format(p.precio)}</span>
+              {c.nombre}
             </button>
           ))}
         </div>
+      )}
+
+      <main className="flex-1 overflow-y-auto px-4 py-4">
+        {productosFiltrados.length === 0 ? (
+          <EmptyState
+            icono={PackageSearch}
+            titulo={buscando ? `Sin resultados para "${busqueda}"` : 'Sin productos en esta categoría'}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {productosFiltrados.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => agregarAlCarrito(p)}
+                className="card-tap flex min-h-[72px] flex-col items-start gap-1 p-3.5"
+              >
+                <span className="text-sm font-semibold text-ink-900">{p.nombre}</span>
+                <span className="text-xs font-medium text-petrol-600">{formatoCOP.format(p.precio)}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {pedido?.items?.length > 0 && (
           <div className="mt-6">
@@ -195,7 +232,11 @@ export default function MeseroPedidoDetalle() {
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold">{formatoCOP.format(it.cantidad * it.precio_unitario)}</span>
                     {it.estado === 'pendiente' && (
-                      <button onClick={() => quitarItemPedido(it.id)} className="rounded-lg p-1.5 text-mist-400 hover:bg-red-50 hover:text-red-500">
+                      <button
+                        onClick={() => quitarItemPedido(it.id)}
+                        className="btn-icon-danger"
+                        aria-label={`Quitar ${it.producto?.nombre} del pedido`}
+                      >
                         <X size={16} />
                       </button>
                     )}
@@ -213,16 +254,28 @@ export default function MeseroPedidoDetalle() {
             {carrito.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between text-sm">
                 <span className="text-ink-800">{item.nombre}</span>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => cambiarCantidad(idx, -1)} className="rounded-lg bg-mist-100 p-1"><Minus size={14} /></button>
-                  <span className="w-4 text-center font-semibold">{item.cantidad}</span>
-                  <button onClick={() => cambiarCantidad(idx, 1)} className="rounded-lg bg-mist-100 p-1"><Plus size={14} /></button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => cambiarCantidad(idx, -1)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-mist-100 text-ink-800 active:scale-95"
+                    aria-label={`Quitar una unidad de ${item.nombre}`}
+                  >
+                    <Minus size={15} />
+                  </button>
+                  <span className="w-5 text-center font-semibold">{item.cantidad}</span>
+                  <button
+                    onClick={() => cambiarCantidad(idx, 1)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-mist-100 text-ink-800 active:scale-95"
+                    aria-label={`Agregar una unidad de ${item.nombre}`}
+                  >
+                    <Plus size={15} />
+                  </button>
                 </div>
               </div>
             ))}
           </div>
-          <button onClick={enviarPedido} disabled={enviando} className="btn-primary w-full">
-            <Send size={16} /> Enviar a barra · {formatoCOP.format(totalCarrito)}
+          <button onClick={enviarPedido} disabled={enviando} className="btn-lg btn-primary w-full">
+            <Send size={18} /> {enviando ? 'Enviando…' : `Enviar a barra · ${formatoCOP.format(totalCarrito)}`}
           </button>
         </div>
       )}

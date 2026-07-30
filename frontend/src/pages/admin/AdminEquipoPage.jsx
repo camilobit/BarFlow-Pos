@@ -4,7 +4,9 @@ import toast from 'react-hot-toast';
 import { usuariosApi, negociosApi, barrasApi } from '../../services/endpoints.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import Modal from '../../components/common/Modal.jsx';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import { useConfirm } from '../../hooks/useConfirm.js';
+import { SkeletonTabla } from '../../components/common/Skeleton.jsx';
 
 const ROLES = [
   { valor: 'admin_negocio', etiqueta: 'Administrador' },
@@ -26,6 +28,7 @@ export default function AdminEquipoPage() {
   const [modalResetear, setModalResetear] = useState(null); // usuario seleccionado, o null
   const [nuevaPassword, setNuevaPassword] = useState('');
   const [form, setForm] = useState(FORM_VACIO);
+  const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
 
   // Un super_admin no tiene negocio propio (negocio_id = null) — necesita
   // elegir de cuál negocio quiere ver/crear el equipo.
@@ -70,7 +73,13 @@ export default function AdminEquipoPage() {
   }
 
   async function desactivar(usuario) {
-    if (!confirm(`¿Desactivar a ${usuario.nombre}? Ya no podrá iniciar sesión.`)) return;
+    const ok = await confirmar({
+      titulo: 'Desactivar empleado',
+      mensaje: `¿Desactivar a ${usuario.nombre}? Ya no podrá iniciar sesión, pero puedes reactivarlo cuando quieras.`,
+      textoConfirmar: 'Desactivar',
+      peligroso: true,
+    });
+    if (!ok) return;
     await usuariosApi.desactivar(usuario.id);
     cargar();
   }
@@ -82,7 +91,13 @@ export default function AdminEquipoPage() {
   }
 
   async function eliminarPermanente(usuario) {
-    if (!confirm(`¿Eliminar a "${usuario.nombre}" para siempre y liberar su correo? Solo se puede si nunca tuvo actividad.`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar empleado',
+      mensaje: `¿Eliminar a "${usuario.nombre}" para siempre y liberar su correo? Solo se puede si nunca tuvo actividad. Esta acción no se puede deshacer.`,
+      textoConfirmar: 'Eliminar para siempre',
+      peligroso: true,
+    });
+    if (!ok) return;
     try {
       await usuariosApi.eliminarPermanente(usuario.id);
       toast.success('Empleado eliminado. Su correo ya está disponible de nuevo.');
@@ -104,7 +119,7 @@ export default function AdminEquipoPage() {
     }
   }
 
-  if (!usuarios) return <LoadingScreen />;
+  if (!usuarios) return <SkeletonTabla filas={4} columnas={5} />;
 
   const nombreNegocioActivo = negocios.find((n) => n.id === negocioActivo)?.nombre;
 
@@ -297,6 +312,8 @@ export default function AdminEquipoPage() {
           </form>
         </Modal>
       )}
+
+      {estaAbierto && <ConfirmDialog {...opciones} onConfirmar={onConfirmar} onCancelar={onCancelar} />}
     </div>
   );
 }

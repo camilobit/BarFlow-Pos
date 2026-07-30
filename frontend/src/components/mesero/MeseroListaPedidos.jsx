@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Plus, Calendar, CheckCircle2, Clock3, KeyRound } from 'lucide-react';
+import { LogOut, Plus, Calendar, CheckCircle2, Clock3, KeyRound, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { pedidosApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import { SkeletonLista } from '../common/Skeleton.jsx';
+import EmptyState from '../common/EmptyState.jsx';
 import CambiarPasswordModal from '../common/CambiarPasswordModal.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -39,9 +40,7 @@ export default function MeseroListaPedidos() {
   useEffect(() => { cargar(); }, [cargar]);
   useRealtimeTable({ table: 'pedidos', onChange: cargar });
 
-  if (!pedidos) return <LoadingScreen />;
-
-  const visibles = pedidos.filter((p) => {
+  const visibles = (pedidos || []).filter((p) => {
     if (ESTADO_CANCELADO.includes(p.estado)) return filtroEstado === 'todos';
     if (filtroEstado === 'completos') return ESTADO_COMPLETO.includes(p.estado);
     if (filtroEstado === 'incompletos') return !ESTADO_COMPLETO.includes(p.estado);
@@ -56,10 +55,10 @@ export default function MeseroListaPedidos() {
           <p className="text-xs text-mist-500">Hola, {perfil?.nombre}</p>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setModalPassword(true)} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100" title="Cambiar contraseña">
+          <button onClick={() => setModalPassword(true)} className="btn-icon" aria-label="Cambiar contraseña">
             <KeyRound size={20} />
           </button>
-          <button onClick={cerrarSesion} className="rounded-xl p-2 text-mist-500 hover:bg-mist-100">
+          <button onClick={cerrarSesion} className="btn-icon" aria-label="Cerrar sesión">
             <LogOut size={20} />
           </button>
         </div>
@@ -68,10 +67,12 @@ export default function MeseroListaPedidos() {
       {modalPassword && <CambiarPasswordModal onClose={() => setModalPassword(false)} />}
 
       <div className="space-y-3 border-b border-mist-200 bg-white px-4 py-3">
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex gap-2 overflow-x-auto" role="tablist" aria-label="Filtrar por estado">
           {FILTROS_ESTADO.map((f) => (
             <button
               key={f.valor}
+              role="tab"
+              aria-selected={filtroEstado === f.valor}
               onClick={() => setFiltroEstado(f.valor)}
               className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
                 filtroEstado === f.valor ? 'bg-petrol-600 text-white' : 'bg-mist-100 text-ink-800'
@@ -83,33 +84,42 @@ export default function MeseroListaPedidos() {
         </div>
         <div className="relative">
           <Calendar size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mist-400" />
+          <label htmlFor="filtro-fecha-mesero" className="sr-only-focusable">Filtrar por fecha</label>
           <input
+            id="filtro-fecha-mesero"
             type="date"
             value={filtroFecha}
             onChange={(e) => setFiltroFecha(e.target.value)}
-            className="input pl-9"
+            className="input pl-9 pr-10"
           />
           {filtroFecha && (
-            <button onClick={() => setFiltroFecha('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-petrol-600">
-              Limpiar
+            <button
+              onClick={() => setFiltroFecha('')}
+              className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-mist-400 hover:bg-mist-100 hover:text-ink-800"
+              aria-label="Quitar filtro de fecha"
+            >
+              <X size={16} />
             </button>
           )}
         </div>
       </div>
 
       <main className="px-4 py-4">
-        {visibles.length === 0 ? (
-          <div className="flex h-[40vh] flex-col items-center justify-center text-center text-mist-500">
-            <Clock3 size={36} className="mb-3 opacity-40" />
-            <p className="text-sm">No tienes pedidos con este filtro.</p>
-          </div>
+        {!pedidos ? (
+          <SkeletonLista filas={4} />
+        ) : visibles.length === 0 ? (
+          <EmptyState
+            icono={Clock3}
+            titulo="No tienes pedidos con este filtro"
+            descripcion="Prueba cambiar el filtro de estado o de fecha, o crea un pedido nuevo con el botón de abajo."
+          />
         ) : (
           <div className="space-y-3">
             {visibles.map((pedido) => (
               <button
                 key={pedido.id}
                 onClick={() => navigate(`/mesero/pedido/${pedido.id}`)}
-                className="card flex w-full items-center justify-between p-4 text-left active:scale-[0.98]"
+                className="card-tap flex w-full items-center justify-between p-4"
               >
                 <div>
                   <p className="text-sm font-semibold text-ink-900">
@@ -134,7 +144,8 @@ export default function MeseroListaPedidos() {
 
       <button
         onClick={() => navigate('/mesero/pedido/nuevo')}
-        className="fixed inset-x-4 bottom-6 flex items-center justify-center gap-2 rounded-2xl bg-gold-500 py-4 text-sm font-bold text-ink-950 shadow-lift active:scale-[0.98]"
+        className="btn-lg fixed inset-x-4 bg-gold-500 text-ink-950 hover:bg-gold-600 shadow-lift"
+        style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
         <Plus size={20} /> Crear pedido
       </button>

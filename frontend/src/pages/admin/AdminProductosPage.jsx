@@ -4,7 +4,9 @@ import toast from 'react-hot-toast';
 import { productosApi, barrasApi } from '../../services/endpoints.js';
 import { parseCSV, descargarCSV } from '../../utils/csv.js';
 import Modal from '../../components/common/Modal.jsx';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import { useConfirm } from '../../hooks/useConfirm.js';
+import { SkeletonTabla } from '../../components/common/Skeleton.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -19,6 +21,7 @@ export default function AdminProductosPage() {
   const [editando, setEditando] = useState(null); // producto en edición, o null si es nuevo
   const [form, setForm] = useState(FORM_VACIO);
   const [nombreCategoria, setNombreCategoria] = useState('');
+  const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
   const inputArchivoRef = useRef(null);
 
   const cargar = useCallback(async () => {
@@ -154,7 +157,13 @@ export default function AdminProductosPage() {
   }
 
   async function eliminarProducto(producto) {
-    if (!confirm(`¿Eliminar "${producto.nombre}" para siempre? Solo se puede si nunca tuvo pedidos.`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar producto',
+      mensaje: `¿Eliminar "${producto.nombre}" para siempre? Solo se puede si nunca tuvo pedidos. Esta acción no se puede deshacer.`,
+      textoConfirmar: 'Eliminar para siempre',
+      peligroso: true,
+    });
+    if (!ok) return;
     try {
       await productosApi.eliminarPermanente(producto.id);
       toast.success('Producto eliminado');
@@ -164,7 +173,7 @@ export default function AdminProductosPage() {
     }
   }
 
-  if (!productos) return <LoadingScreen />;
+  if (!productos) return <SkeletonTabla filas={5} columnas={5} />;
 
   return (
     <div className="space-y-6">
@@ -210,10 +219,10 @@ export default function AdminProductosPage() {
                     <button onClick={() => toggleActivo(p)} className={`badge ${p.activo ? 'bg-petrol-100 text-petrol-700' : 'bg-mist-100 text-mist-500'}`}>
                       {p.activo ? 'Activo' : 'Inactivo'}
                     </button>
-                    <button onClick={() => abrirEditar(p)} className="rounded-lg p-1.5 text-mist-400 hover:bg-mist-100 hover:text-ink-800" title="Editar producto">
+                    <button onClick={() => abrirEditar(p)} className="btn-icon" aria-label={`Editar ${p.nombre}`}>
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => eliminarProducto(p)} className="rounded-lg p-1.5 text-mist-400 hover:bg-red-50 hover:text-red-500" title="Eliminar producto">
+                    <button onClick={() => eliminarProducto(p)} className="btn-icon-danger" aria-label={`Eliminar ${p.nombre}`}>
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -240,7 +249,7 @@ export default function AdminProductosPage() {
             </p>
             <div className="flex gap-2">
               <button onClick={() => abrirEditar(p)} className="btn-secondary flex-1 !py-1.5 text-xs"><Pencil size={13} /> Editar</button>
-              <button onClick={() => eliminarProducto(p)} className="rounded-xl border border-mist-200 p-2 text-mist-400 hover:bg-red-50 hover:text-red-500">
+              <button onClick={() => eliminarProducto(p)} className="btn-icon-danger border border-mist-200" aria-label={`Eliminar ${p.nombre}`}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -309,6 +318,8 @@ export default function AdminProductosPage() {
           </form>
         </Modal>
       )}
+
+      {estaAbierto && <ConfirmDialog {...opciones} onConfirmar={onConfirmar} onCancelar={onCancelar} />}
     </div>
   );
 }

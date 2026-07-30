@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { pedidosApi } from '../../services/endpoints.js';
+import Modal from '../common/Modal.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 const METODOS = [
@@ -42,40 +42,37 @@ export default function CerrarCuentaModal({ pedido, barras = [], barraSugerida, 
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-ink-950/50 sm:items-center">
-      <div className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-ink-900">Cerrar cuenta</h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-mist-100"><X size={20} /></button>
+    <Modal title="Cerrar cuenta" onClose={onClose}>
+      <div className="mb-4 space-y-1 rounded-2xl bg-mist-50 p-4 text-sm">
+        <div className="flex justify-between"><span className="text-mist-500">Subtotal</span><span>{formatoCOP.format(pedido.subtotal)}</span></div>
+        <div className="flex justify-between"><span className="text-mist-500">Descuento</span><span>-{formatoCOP.format(descuento || 0)}</span></div>
+        <div className="flex justify-between"><span className="text-mist-500">Propina</span><span>+{formatoCOP.format(propina || 0)}</span></div>
+        <div className="mt-2 flex justify-between border-t border-mist-200 pt-2 font-display text-base font-bold text-ink-900">
+          <span>Total</span><span>{formatoCOP.format(total)}</span>
         </div>
+      </div>
 
-        <div className="mb-4 space-y-1 rounded-2xl bg-mist-50 p-4 text-sm">
-          <div className="flex justify-between"><span className="text-mist-500">Subtotal</span><span>{formatoCOP.format(pedido.subtotal)}</span></div>
-          <div className="flex justify-between"><span className="text-mist-500">Descuento</span><span>-{formatoCOP.format(descuento || 0)}</span></div>
-          <div className="flex justify-between"><span className="text-mist-500">Propina</span><span>+{formatoCOP.format(propina || 0)}</span></div>
-          <div className="mt-2 flex justify-between border-t border-mist-200 pt-2 font-display text-base font-bold text-ink-900">
-            <span>Total</span><span>{formatoCOP.format(total)}</span>
-          </div>
+      {barras.length > 1 && (
+        <div className="mb-4">
+          <label className="label" htmlFor="cerrar-cuenta-barra">¿A qué caja entregas el dinero?</label>
+          <select id="cerrar-cuenta-barra" className="select" value={barraId} onChange={(e) => setBarraId(e.target.value)}>
+            {barras.map((b) => (
+              <option key={b.id} value={b.id}>{b.nombre}</option>
+            ))}
+          </select>
         </div>
+      )}
 
-        {barras.length > 1 && (
-          <div className="mb-4">
-            <label className="mb-1.5 block text-xs font-semibold text-mist-500">¿A qué caja entregas el dinero?</label>
-            <select className="input" value={barraId} onChange={(e) => setBarraId(e.target.value)}>
-              {barras.map((b) => (
-                <option key={b.id} value={b.id}>{b.nombre}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <label className="mb-1.5 block text-xs font-semibold text-mist-500">Método de pago</label>
-        <div className="mb-4 grid grid-cols-2 gap-2">
+      <fieldset className="mb-4">
+        <legend className="label">Método de pago</legend>
+        <div className="grid grid-cols-2 gap-2">
           {METODOS.map((m) => (
             <button
               key={m.valor}
+              type="button"
+              aria-pressed={metodo === m.valor}
               onClick={() => setMetodo(m.valor)}
-              className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+              className={`min-h-[44px] rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                 metodo === m.valor ? 'bg-petrol-600 text-white' : 'bg-mist-100 text-ink-800'
               }`}
             >
@@ -83,28 +80,28 @@ export default function CerrarCuentaModal({ pedido, barras = [], barraSugerida, 
             </button>
           ))}
         </div>
+      </fieldset>
 
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-mist-500">Descuento</label>
-            <input type="number" min="0" value={descuento} onChange={(e) => setDescuento(e.target.value)} className="input" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-mist-500">Propina</label>
-            <input type="number" min="0" value={propina} onChange={(e) => setPropina(e.target.value)} className="input" />
-          </div>
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div>
+          <label className="label" htmlFor="cerrar-cuenta-descuento">Descuento</label>
+          <input id="cerrar-cuenta-descuento" type="number" min="0" value={descuento} onChange={(e) => setDescuento(e.target.value)} className="input" />
         </div>
-
-        {(metodo === 'transferencia' || metodo === 'mixto') && (
-          <p className="mb-4 rounded-xl bg-gold-50 px-3 py-2.5 text-xs text-gold-600">
-            Recuerda llevarle al cajero el pantallazo del comprobante de Nequi junto con esta cuenta.
-          </p>
-        )}
-
-        <button onClick={confirmar} disabled={enviando} className="btn-gold w-full">
-          {enviando ? 'Procesando…' : `Confirmar pago · ${formatoCOP.format(total)}`}
-        </button>
+        <div>
+          <label className="label" htmlFor="cerrar-cuenta-propina">Propina</label>
+          <input id="cerrar-cuenta-propina" type="number" min="0" value={propina} onChange={(e) => setPropina(e.target.value)} className="input" />
+        </div>
       </div>
-    </div>
+
+      {(metodo === 'transferencia' || metodo === 'mixto') && (
+        <p className="mb-4 rounded-xl bg-gold-50 px-3 py-2.5 text-xs text-gold-600">
+          Recuerda llevarle al cajero el pantallazo del comprobante de Nequi junto con esta cuenta.
+        </p>
+      )}
+
+      <button onClick={confirmar} disabled={enviando} className="btn-lg btn-gold w-full">
+        {enviando ? 'Procesando…' : `Confirmar pago · ${formatoCOP.format(total)}`}
+      </button>
+    </Modal>
   );
 }

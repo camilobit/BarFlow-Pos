@@ -3,7 +3,7 @@ import { Plus, Search, Gift, Trophy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clientesApi } from '../../services/endpoints.js';
 import Modal from '../../components/common/Modal.jsx';
-import LoadingScreen from '../../components/common/LoadingScreen.jsx';
+import { SkeletonTabla } from '../../components/common/Skeleton.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 const NIVEL_COLOR = {
@@ -48,7 +48,7 @@ export default function AdminClientesPage() {
     }
   }
 
-  if (!clientes) return <LoadingScreen />;
+  if (!clientes) return <SkeletonTabla filas={5} columnas={5} />;
 
   return (
     <div className="space-y-6">
