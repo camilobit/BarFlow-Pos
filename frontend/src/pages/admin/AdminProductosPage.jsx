@@ -139,8 +139,24 @@ export default function AdminProductosPage() {
     try {
       await productosApi.crearCategoria({ nombre: nombreCategoria });
       toast.success('Categoría creada');
-      setModalCategoria(false);
       setNombreCategoria('');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  async function eliminarCategoria(categoria) {
+    const ok = await confirmar({
+      titulo: 'Eliminar categoría',
+      mensaje: `¿Eliminar "${categoria.nombre}"? Los productos que la tenían NO se eliminan, solo quedan sin categoría.`,
+      textoConfirmar: 'Eliminar categoría',
+      peligroso: true,
+    });
+    if (!ok) return;
+    try {
+      await productosApi.eliminarCategoria(categoria.id);
+      toast.success('Categoría eliminada');
       cargar();
     } catch (err) {
       toast.error(err.message);
@@ -189,7 +205,7 @@ export default function AdminProductosPage() {
             <Upload size={16} /> Importar CSV
           </button>
           <input ref={inputArchivoRef} type="file" accept=".csv" className="hidden" onChange={importarArchivo} />
-          <button onClick={() => setModalCategoria(true)} className="btn-secondary">+ Categoría</button>
+          <button onClick={() => setModalCategoria(true)} className="btn-secondary">Categorías</button>
           <button onClick={abrirNuevo} className="btn-primary"><Plus size={16} /> Nuevo producto</button>
         </div>
       </div>
@@ -311,10 +327,24 @@ export default function AdminProductosPage() {
       )}
 
       {modalCategoria && (
-        <Modal title="Nueva categoría" onClose={() => setModalCategoria(false)}>
-          <form onSubmit={crearCategoria} className="space-y-3">
-            <input required className="input" placeholder="Nombre de la categoría" value={nombreCategoria} onChange={(e) => setNombreCategoria(e.target.value)} />
-            <button type="submit" className="btn-primary w-full">Crear categoría</button>
+        <Modal title="Categorías" onClose={() => setModalCategoria(false)}>
+          <div className="mb-4 space-y-2">
+            {categorias.length === 0 ? (
+              <p className="text-sm text-mist-500">Todavía no has creado ninguna categoría.</p>
+            ) : (
+              categorias.map((c) => (
+                <div key={c.id} className="flex items-center justify-between rounded-xl bg-mist-50 px-3.5 py-2.5">
+                  <span className="text-sm font-medium text-ink-900">{c.nombre}</span>
+                  <button onClick={() => eliminarCategoria(c)} className="btn-icon-danger" aria-label={`Eliminar categoría ${c.nombre}`}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          <form onSubmit={crearCategoria} className="flex gap-2 border-t border-mist-200 pt-4">
+            <input required className="input" placeholder="Nueva categoría" value={nombreCategoria} onChange={(e) => setNombreCategoria(e.target.value)} />
+            <button type="submit" className="btn-primary shrink-0">Añadir</button>
           </form>
         </Modal>
       )}

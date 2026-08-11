@@ -47,6 +47,11 @@ export const crearCategoria = asyncHandler(async (req, res) => {
   return response.created(res, categoria, 'Categoría creada');
 });
 
+export const eliminarCategoria = asyncHandler(async (req, res) => {
+  await productosService.eliminarCategoria(req.params.id);
+  return response.noContent(res);
+});
+
 export const listarInsumos = asyncHandler(async (req, res) => {
   const insumos = await productosService.listarInsumos(req.usuario.negocio_id);
   return response.success(res, insumos);
@@ -61,4 +66,10 @@ export const asignarStockBarra = asyncHandler(async (req, res) => {
   const { barra_id, cantidad, stock_minimo } = req.body;
   const resultado = await productosService.asignarStockBarra(req.usuario.negocio_id, req.params.id, barra_id, cantidad, stock_minimo);
   return response.success(res, resultado, 'Stock asignado');
+});
+
+export const establecerStockBarra = asyncHandler(async (req, res) => {
+  const { barra_id, cantidad, stock_minimo } = req.body;
+  const resultado = await productosService.establecerStockBarra(req.usuario.negocio_id, req.params.id, barra_id, cantidad, stock_minimo);
+  return response.success(res, resultado, 'Cantidad actualizada');
 });

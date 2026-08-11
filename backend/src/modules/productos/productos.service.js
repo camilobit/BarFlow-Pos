@@ -150,6 +150,15 @@ export async function crearCategoria(negocioId, payload) {
   return data;
 }
 
+// Borra la categoría — los productos que la tenían quedan "sin categoría"
+// (la columna categoria_id de productos es ON DELETE SET NULL), nunca se
+// borra ningún producto del inventario.
+export async function eliminarCategoria(categoriaId) {
+  const { error } = await supabaseAdmin.from('categorias').delete().eq('id', categoriaId);
+  if (error) throw new AppError('No se pudo eliminar la categoría.', 500, error.message);
+  return { ok: true };
+}
+
 // Catálogo de insumos (nombre, unidad, costo) — el stock real vive por
 // barra en insumo_stock_barra, acá se trae ya combinado para la vista de
 // inventario del admin.
@@ -210,5 +219,46 @@ export async function asignarStockBarra(negocioId, insumoId, barraId, cantidad, 
     .select('*, barra:barras(id, nombre)')
     .single();
   if (error) throw new AppError('No se pudo asignar el stock.', 500, error.message);
+  return data;
+}
+
+// El admin ESTABLECE la cantidad exacta de un insumo en una barra (no
+// suma, reemplaza el valor). Ej: había 20, el admin cuenta físicamente y
+// pone 25 -> queda en 25, no en 45. Mucho más intuitivo que tener que
+// calcular la diferencia a mano.
+export async function establecerStockBarra(negocioId, insumoId, barraId, nuevaCantidad, stockMinimo) {
+  const { data: existente } = await supabaseAdmin
+    .from('insumo_stock_barra')
+    .select('id')
+    .eq('insumo_id', insumoId)
+    .eq('barra_id', barraId)
+    .maybeSingle();
+
+  if (existente) {
+    const { data, error } = await supabaseAdmin
+      .from('insumo_stock_barra')
+      .update({
+        stock: Number(nuevaCantidad),
+        ...(stockMinimo !== undefined && { stock_minimo: stockMinimo }),
+      })
+      .eq('id', existente.id)
+      .select('*, barra:barras(id, nombre)')
+      .single();
+    if (error) throw new AppError('No se pudo actualizar el stock.', 500, error.message);
+    return data;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('insumo_stock_barra')
+    .insert({
+      negocio_id: negocioId,
+      insumo_id: insumoId,
+      barra_id: barraId,
+      stock: Number(nuevaCantidad),
+      stock_minimo: stockMinimo || 0,
+    })
+    .select('*, barra:barras(id, nombre)')
+    .single();
+  if (error) throw new AppError('No se pudo actualizar el stock.', 500, error.message);
   return data;
 }

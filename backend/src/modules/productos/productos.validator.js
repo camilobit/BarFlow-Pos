@@ -35,3 +35,9 @@ export const asignarStockSchema = z.object({
   cantidad: z.number(),
   stock_minimo: z.number().nonnegative().optional(),
 });
+
+export const establecerStockSchema = z.object({
+  barra_id: z.string().uuid(),
+  cantidad: z.number().nonnegative(),
+  stock_minimo: z.number().nonnegative().optional(),
+});

@@ -34,9 +34,11 @@ export const productosApi = {
   eliminarPermanente: (id) => api.delete(`/productos/${id}/permanente`),
   categorias: () => api.get('/productos/categorias/todas').then((r) => r.data),
   crearCategoria: (payload) => api.post('/productos/categorias', payload).then((r) => r.data),
+  eliminarCategoria: (id) => api.delete(`/productos/categorias/${id}`),
   insumos: () => api.get('/productos/insumos/todos').then((r) => r.data),
   crearInsumo: (payload) => api.post('/productos/insumos', payload).then((r) => r.data),
   asignarStockBarra: (id, payload) => api.post(`/productos/insumos/${id}/asignar-stock`, payload).then((r) => r.data),
+  establecerStockBarra: (id, payload) => api.post(`/productos/insumos/${id}/establecer-stock`, payload).then((r) => r.data),
 };
 
 export const cajaApi = {

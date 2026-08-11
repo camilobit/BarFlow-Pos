@@ -51,7 +51,26 @@ export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa,
     await supabaseAdmin.from('mesas').update({ estado: 'ocupada' }).eq('id', mesaId);
   }
 
+  // 4) Pedido NATIVO de barra (cliente que llega directo al mostrador, sin
+  //    mesero): no pasa por "preparación" como un pedido de mesa — quien
+  //    lo crea es quien lo está sirviendo en el momento. Avanzamos los
+  //    ítems automáticamente para que el flujo quede en: crear pedido →
+  //    escoger productos → cobrar, sin un paso de "alistar" de por medio.
+  if (pedido.origen === 'barra') {
+    await marcarItemsComoServidos(pedido.id);
+  }
+
   return obtenerPedidoPorId(pedido.id);
+}
+
+// Pasa TODOS los ítems de un pedido a 'entregado', pasando primero por
+// 'preparando' (en el mismo paso) para que el trigger de la base de datos
+// que descuenta inventario se dispare igual que en el flujo normal — solo
+// que aquí ocurre de una vez, sin que nadie tenga que darle clic manual.
+async function marcarItemsComoServidos(pedidoId) {
+  await supabaseAdmin.from('pedido_items').update({ estado: 'preparando' }).eq('pedido_id', pedidoId);
+  await supabaseAdmin.from('pedido_items').update({ estado: 'entregado' }).eq('pedido_id', pedidoId);
+  await sincronizarEstadoPedido(pedidoId);
 }
 
 export async function obtenerPedidoPorId(pedidoId) {
@@ -93,10 +112,28 @@ export async function agregarItems(pedidoId, items) {
   }));
   const { error } = await supabaseAdmin.from('pedido_items').insert(filas);
   if (error) throw new AppError('No se pudieron agregar los productos.', 500, error.message);
+
+  // Si es un pedido nativo de barra, los ítems nuevos (ej. el cliente pidió
+  // una ronda más) también se sirven de una vez, igual que los primeros.
+  const { data: pedidoActual } = await supabaseAdmin.from('pedidos').select('origen').eq('id', pedidoId).single();
+  if (pedidoActual?.origen === 'barra') {
+    await marcarItemsComoServidos(pedidoId);
+  }
+
   return obtenerPedidoPorId(pedidoId);
 }
 
 export async function quitarItem(pedidoId, itemId) {
+  // Un ítem ya entregado representa una venta real servida — no se puede
+  // borrar sin más (evita perder historial de inventario ya descontado).
+  // Antes de entregarse (pendiente/preparando/listo) sí se puede quitar o
+  // cancelar por completo: por error del mesero, o porque la barra quiere
+  // limpiar un pedido muerto/duplicado que nunca se llegó a despachar.
+  const { data: item } = await supabaseAdmin.from('pedido_items').select('estado').eq('id', itemId).single();
+  if (item?.estado === 'entregado') {
+    throw new AppError('Este producto ya fue entregado, no se puede eliminar. Si ya se cobró, es una venta real.', 409);
+  }
+
   const { error } = await supabaseAdmin.from('pedido_items').delete().eq('id', itemId).eq('pedido_id', pedidoId);
   if (error) throw new AppError('No se pudo quitar el producto.', 500, error.message);
   return obtenerPedidoPorId(pedidoId);

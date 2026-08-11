@@ -38,21 +38,33 @@ export default function AdminInventarioPage() {
     }
   }
 
-  async function asignarStock(e) {
+  async function actualizarStock(e) {
     e.preventDefault();
     try {
-      await productosApi.asignarStockBarra(modalAsignar.id, {
+      await productosApi.establecerStockBarra(modalAsignar.id, {
         barra_id: formAsignar.barra_id,
         cantidad: Number(formAsignar.cantidad),
         ...(formAsignar.stock_minimo !== '' && { stock_minimo: Number(formAsignar.stock_minimo) }),
       });
-      toast.success('Stock asignado');
+      toast.success('Cantidad actualizada');
       setModalAsignar(null);
       setFormAsignar(FORM_ASIGNAR);
       cargar();
     } catch (err) {
       toast.error(err.message);
     }
+  }
+
+  // Al elegir la barra, precarga la cantidad ACTUAL de esa barra para ese
+  // insumo — así el admin edita el número directamente (lo que ve es lo
+  // que hay), en vez de tener que calcular una diferencia a mano.
+  function alElegirBarra(barraId) {
+    const actual = (modalAsignar?.stock_por_barra || []).find((s) => s.barra_id === barraId);
+    setFormAsignar({
+      barra_id: barraId,
+      cantidad: actual ? String(actual.stock) : '0',
+      stock_minimo: actual ? String(actual.stock_minimo) : '',
+    });
   }
 
   if (!insumos) return <SkeletonLista filas={4} />;
@@ -98,7 +110,7 @@ export default function AdminInventarioPage() {
                           onClick={() => { setModalAsignar(i); setFormAsignar(FORM_ASIGNAR); }}
                           className="btn-secondary !px-2.5 !py-1 text-xs"
                         >
-                          <PackagePlus size={13} /> Asignar
+                          <PackagePlus size={13} /> Cantidad
                         </button>
                         <button onClick={() => setExpandido(abierto ? null : i.id)} className="rounded-lg p-1.5 text-mist-400 hover:bg-mist-100">
                           {abierto ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -176,7 +188,7 @@ export default function AdminInventarioPage() {
                 onClick={() => { setModalAsignar(i); setFormAsignar(FORM_ASIGNAR); }}
                 className="btn-primary w-full !py-2 text-sm"
               >
-                <PackagePlus size={15} /> Asignar stock
+                <PackagePlus size={15} /> Actualizar cantidad
               </button>
             </div>
           );
@@ -205,32 +217,42 @@ export default function AdminInventarioPage() {
               <label className="mb-1.5 block text-xs font-semibold text-mist-500">Costo unitario</label>
               <input type="number" min="0" className="input" value={form.costo_unitario} onChange={(e) => setForm({ ...form, costo_unitario: e.target.value })} />
             </div>
-            <p className="text-xs text-mist-500">Después de crearlo, usa "Asignar" para repartir el stock entre tus barras.</p>
+            <p className="text-xs text-mist-500">Después de crearlo, toca "Cantidad" para poner cuántas unidades tiene cada barra.</p>
             <button type="submit" className="btn-primary w-full">Crear insumo</button>
           </form>
         </Modal>
       )}
 
       {modalAsignar && (
-        <Modal title={`Asignar stock de "${modalAsignar.nombre}"`} onClose={() => setModalAsignar(null)}>
-          <form onSubmit={asignarStock} className="space-y-3">
+        <Modal title={`Cantidad de "${modalAsignar.nombre}"`} onClose={() => setModalAsignar(null)}>
+          <form onSubmit={actualizarStock} className="space-y-3">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-mist-500">Barra</label>
-              <select required className="input" value={formAsignar.barra_id} onChange={(e) => setFormAsignar({ ...formAsignar, barra_id: e.target.value })}>
+              <select required className="input" value={formAsignar.barra_id} onChange={(e) => alElegirBarra(e.target.value)}>
                 <option value="">Selecciona una barra</option>
                 {barras.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-mist-500">Cantidad a agregar</label>
-              <input required type="number" className="input" value={formAsignar.cantidad} onChange={(e) => setFormAsignar({ ...formAsignar, cantidad: e.target.value })} />
-              <p className="mt-1 text-xs text-mist-500">Se suma al stock actual de esa barra (usa un número negativo para descontar manualmente).</p>
+              <label className="mb-1.5 block text-xs font-semibold text-mist-500">Cantidad en esta barra ahora mismo</label>
+              <input
+                required
+                type="number"
+                min="0"
+                className="input"
+                value={formAsignar.cantidad}
+                onChange={(e) => setFormAsignar({ ...formAsignar, cantidad: e.target.value })}
+                disabled={!formAsignar.barra_id}
+              />
+              <p className="mt-1 text-xs text-mist-500">
+                Escribe el número real que hay — no se suma a lo anterior, esto reemplaza la cantidad guardada.
+              </p>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-mist-500">Stock mínimo de alerta (opcional)</label>
               <input type="number" min="0" className="input" value={formAsignar.stock_minimo} onChange={(e) => setFormAsignar({ ...formAsignar, stock_minimo: e.target.value })} />
             </div>
-            <button type="submit" className="btn-primary w-full">Asignar</button>
+            <button type="submit" className="btn-primary w-full" disabled={!formAsignar.barra_id}>Guardar cantidad</button>
           </form>
         </Modal>
       )}

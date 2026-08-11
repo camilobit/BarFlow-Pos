@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireRole } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import * as ctrl from './productos.controller.js';
-import { crearProductoSchema, importarProductosSchema, asignarStockSchema } from './productos.validator.js';
+import { crearProductoSchema, importarProductosSchema, asignarStockSchema, establecerStockSchema } from './productos.validator.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -16,9 +16,11 @@ router.delete('/:id/permanente', requireRole('admin_negocio', 'super_admin'), ct
 
 router.get('/categorias/todas', ctrl.listarCategorias);
 router.post('/categorias', requireRole('admin_negocio', 'super_admin'), ctrl.crearCategoria);
+router.delete('/categorias/:id', requireRole('admin_negocio', 'super_admin'), ctrl.eliminarCategoria);
 
 router.get('/insumos/todos', requireRole('admin_negocio', 'super_admin'), ctrl.listarInsumos);
 router.post('/insumos', requireRole('admin_negocio', 'super_admin'), ctrl.crearInsumo);
 router.post('/insumos/:id/asignar-stock', requireRole('admin_negocio', 'super_admin'), validate(asignarStockSchema), ctrl.asignarStockBarra);
+router.post('/insumos/:id/establecer-stock', requireRole('admin_negocio', 'super_admin'), validate(establecerStockSchema), ctrl.establecerStockBarra);
 
 export default router;

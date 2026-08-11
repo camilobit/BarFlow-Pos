@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound,
-  Plus, BarChart3, ClipboardList, Timer, TrendingUp,
+  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -10,6 +10,8 @@ import { pedidosApi, barrasApi, cajaApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
 import Modal from '../../components/common/Modal.jsx';
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import { useConfirm } from '../../hooks/useConfirm.js';
 import EmptyState from '../../components/common/EmptyState.jsx';
 import CambiarPasswordModal from '../../components/common/CambiarPasswordModal.jsx';
 
@@ -30,11 +32,13 @@ export default function BarraPage() {
   const [barraId, setBarraId] = useState(null);
   const [items, setItems] = useState([]);
   const [pagosPendientes, setPagosPendientes] = useState([]);
+  const [porCobrar, setPorCobrar] = useState([]);
   const [caja, setCaja] = useState(undefined);
   const [estadisticas, setEstadisticas] = useState(null);
   const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
-  const [tab, setTab] = useState('pedidos'); // pedidos | pagos | caja | estadisticas
+  const [tab, setTab] = useState('pedidos'); // pedidos | pagos | porcobrar | caja | estadisticas
   const [cargando, setCargando] = useState(true);
+  const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
   const [modalCerrarCaja, setModalCerrarCaja] = useState(false);
   const [modalPassword, setModalPassword] = useState(false);
@@ -63,6 +67,16 @@ export default function BarraPage() {
     if (!barraId) return;
     setPagosPendientes(await pedidosApi.pagosPorVerificar(barraId));
   }, [barraId]);
+
+  // Pedidos que ESTE cajero creó directo en la barra (cliente en el
+  // mostrador, sin mesero) y que ya se sirvieron pero todavía no se han
+  // cobrado — para poder encontrarlos y cerrarlos aunque haya pasado un
+  // rato desde que se crearon.
+  const cargarPorCobrar = useCallback(async () => {
+    if (!barraId || !perfil?.id) return;
+    const data = await pedidosApi.listar({ origen: 'barra', mesero_id: perfil.id, estado: 'entregado' });
+    setPorCobrar(data);
+  }, [barraId, perfil?.id]);
 
   const cargarCaja = useCallback(async () => {
     if (!barraId) return;
@@ -95,13 +109,13 @@ export default function BarraPage() {
   }, [barraId]);
 
   useEffect(() => { cargarBarras(); }, [cargarBarras]);
-  useEffect(() => { cargarItems(); cargarPagosPendientes(); cargarCaja(); }, [cargarItems, cargarPagosPendientes, cargarCaja]);
+  useEffect(() => { cargarItems(); cargarPagosPendientes(); cargarCaja(); cargarPorCobrar(); }, [cargarItems, cargarPagosPendientes, cargarCaja, cargarPorCobrar]);
   useEffect(() => { if (tab === 'estadisticas') cargarEstadisticas(); }, [tab, cargarEstadisticas]);
 
   useRealtimeTable({ table: 'pedido_items', filter: barraId ? `barra_id=eq.${barraId}` : undefined, onChange: cargarItems, enabled: !!barraId });
   useRealtimeTable({
     table: 'pedidos',
-    onChange: () => { cargarPagosPendientes(); if (tab === 'estadisticas') cargarEstadisticas(); },
+    onChange: () => { cargarPagosPendientes(); cargarPorCobrar(); if (tab === 'estadisticas') cargarEstadisticas(); },
     enabled: !!barraId,
   });
 
@@ -110,6 +124,26 @@ export default function BarraPage() {
     if (!siguiente) return;
     try {
       await pedidosApi.actualizarEstadoItem(item.id, siguiente);
+      cargarItems();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  // Para pedidos muertos, duplicados por error, o que el cliente canceló
+  // antes de que se despachara — solo funciona mientras no esté entregado
+  // (el backend también lo protege, esto es la confirmación al usuario).
+  async function cancelarItem(item) {
+    const ok = await confirmar({
+      titulo: 'Cancelar producto',
+      mensaje: `¿Eliminar "${item.cantidad}× ${item.producto?.nombre}" de este pedido? No se puede deshacer.`,
+      textoConfirmar: 'Eliminar',
+      peligroso: true,
+    });
+    if (!ok) return;
+    try {
+      await pedidosApi.quitarItem(item.pedido.id, item.id);
+      toast.success('Producto eliminado del pedido');
       cargarItems();
     } catch (err) {
       toast.error(err.message);
@@ -206,6 +240,14 @@ export default function BarraPage() {
             </span>
           )}
         </button>
+        <button onClick={() => setTab('porcobrar')} className={`relative rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'porcobrar' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
+          Por cobrar
+          {porCobrar.length > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold-500 text-[10px] font-bold text-ink-950">
+              {porCobrar.length}
+            </span>
+          )}
+        </button>
         <button onClick={() => setTab('caja')} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'caja' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           Caja
         </button>
@@ -269,9 +311,14 @@ export default function BarraPage() {
                     {new Date(item.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
                   </div>
 
-                  <button onClick={() => avanzarEstado(item)} className="btn-primary w-full">
-                    {ETIQUETA_ACCION[item.estado]}
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => avanzarEstado(item)} className="btn-primary flex-1">
+                      {ETIQUETA_ACCION[item.estado]}
+                    </button>
+                    <button onClick={() => cancelarItem(item)} className="rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Cancelar producto">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -300,6 +347,27 @@ export default function BarraPage() {
                   <p className="mb-3 text-xs capitalize text-gold-400">{pedido.metodo_pago}</p>
                   <button onClick={() => confirmarPago(pedido)} className="btn-gold w-full">
                     <BadgeCheck size={16} /> Confirmar recibido
+                  </button>
+                </article>
+              ))}
+            </div>
+          )
+        )}
+
+        {tab === 'porcobrar' && (
+          porCobrar.length === 0 ? (
+            <EmptyState icono={Receipt} titulo="No tienes pedidos de barra pendientes de cobro" oscuro />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {porCobrar.map((pedido) => (
+                <article key={pedido.id} className="rounded-2xl border-2 border-ink-800 bg-ink-900 p-4 shadow-lift">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
+                    {pedido.referencia_mesa || 'Cliente en barra'}
+                  </p>
+                  <p className="mb-2 text-xs text-mist-500">#{pedido.id.slice(0, 8)} · {pedido.items?.length || 0} productos</p>
+                  <p className="mb-3 font-display text-xl font-bold text-white">{formatoCOP.format(pedido.subtotal)}</p>
+                  <button onClick={() => navigate(`/mesero/pedido/${pedido.id}`)} className="btn-gold w-full">
+                    <Receipt size={16} /> Cobrar ahora
                   </button>
                 </article>
               ))}
@@ -397,6 +465,7 @@ export default function BarraPage() {
       )}
 
       {modalPassword && <CambiarPasswordModal onClose={() => setModalPassword(false)} />}
+      {estaAbierto && <ConfirmDialog {...opciones} onConfirmar={onConfirmar} onCancelar={onCancelar} />}
     </div>
   );
 }
