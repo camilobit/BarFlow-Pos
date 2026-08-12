@@ -30,6 +30,18 @@ export const importarProductosSchema = z.object({
     .min(1, 'El archivo no tiene productos válidos'),
 });
 
+export const importarRecetasSchema = z.object({
+  filas: z
+    .array(
+      z.object({
+        producto: z.string().min(1),
+        insumo: z.string().min(1),
+        cantidad: z.number().positive(),
+      })
+    )
+    .min(1, 'El archivo no tiene líneas de receta válidas'),
+});
+
 export const asignarStockSchema = z.object({
   barra_id: z.string().uuid(),
   cantidad: z.number(),

@@ -37,6 +37,19 @@ export const eliminarPermanente = asyncHandler(async (req, res) => {
   return response.noContent(res);
 });
 
+export const duplicar = asyncHandler(async (req, res) => {
+  const copia = await productosService.duplicarProducto(req.params.id);
+  return response.created(res, copia, 'Producto duplicado');
+});
+
+export const importarRecetas = asyncHandler(async (req, res) => {
+  const resultado = await productosService.importarRecetas(req.usuario.negocio_id, req.body.filas);
+  const mensaje = resultado.noAplicadas.length > 0
+    ? `${resultado.aplicadas} de ${resultado.totalFilas} líneas aplicadas — revisa las que faltaron.`
+    : `${resultado.aplicadas} líneas de receta aplicadas correctamente.`;
+  return response.success(res, resultado, mensaje);
+});
+
 export const listarCategorias = asyncHandler(async (req, res) => {
   const categorias = await productosService.listarCategorias(req.usuario.negocio_id);
   return response.success(res, categorias);
@@ -60,6 +73,11 @@ export const listarInsumos = asyncHandler(async (req, res) => {
 export const crearInsumo = asyncHandler(async (req, res) => {
   const insumo = await productosService.crearInsumo(req.usuario.negocio_id, req.body);
   return response.created(res, insumo, 'Insumo creado');
+});
+
+export const eliminarInsumo = asyncHandler(async (req, res) => {
+  const resultado = await productosService.eliminarInsumo(req.params.id);
+  return response.success(res, resultado, resultado.mensaje);
 });
 
 export const asignarStockBarra = asyncHandler(async (req, res) => {

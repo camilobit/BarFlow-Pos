@@ -5,8 +5,27 @@ const SELECT_PRODUCTO = `
   *,
   categoria:categorias(id, nombre),
   barra:barras(id, nombre),
-  ingredientes:producto_insumos(id, cantidad, insumo:insumos(id, nombre, unidad))
+  ingredientes:producto_insumos(id, cantidad, insumo:insumos(id, nombre, unidad, costo_unitario))
 `;
+
+// El costo de un producto con receta se calcula solo, sumando
+// costo_unitario × cantidad de cada ingrediente — así el margen real
+// queda siempre actualizado sin que el admin tenga que hacer la cuenta
+// a mano cada vez que cambia el precio de un insumo.
+async function calcularCostoDesdeReceta(ingredientes) {
+  if (!ingredientes || !ingredientes.length) return null;
+  const idsInsumos = ingredientes.map((i) => i.insumo_id);
+  const { data: insumos, error } = await supabaseAdmin
+    .from('insumos')
+    .select('id, costo_unitario')
+    .in('id', idsInsumos);
+  if (error) return null;
+
+  return ingredientes.reduce((total, ing) => {
+    const insumo = insumos.find((i) => i.id === ing.insumo_id);
+    return total + (insumo ? Number(insumo.costo_unitario) * Number(ing.cantidad) : 0);
+  }, 0);
+}
 
 export async function listarProductos(negocioId, { categoriaId, barraId, soloActivos } = {}) {
   let query = supabaseAdmin.from('productos').select(SELECT_PRODUCTO).eq('negocio_id', negocioId);
@@ -20,6 +39,14 @@ export async function listarProductos(negocioId, { categoriaId, barraId, soloAct
 
 export async function crearProducto(negocioId, payload) {
   const { ingredientes, controla_inventario_unidad, ...producto } = payload;
+
+  // Si viene con receta (varios insumos), el costo se calcula solo —
+  // ignoramos lo que haya llegado en el campo costo del formulario.
+  if (ingredientes && ingredientes.length) {
+    const costoCalculado = await calcularCostoDesdeReceta(ingredientes);
+    if (costoCalculado !== null) producto.costo = costoCalculado;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('productos')
     .insert({ ...producto, negocio_id: negocioId })
@@ -88,6 +115,12 @@ export async function crearProductosMasivo(negocioId, filas) {
 
 export async function actualizarProducto(productoId, payload) {
   const { ingredientes, ...producto } = payload;
+
+  if (ingredientes && ingredientes.length) {
+    const costoCalculado = await calcularCostoDesdeReceta(ingredientes);
+    if (costoCalculado !== null) producto.costo = costoCalculado;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('productos')
     .update(producto)
@@ -128,6 +161,34 @@ export async function eliminarProductoPermanente(productoId) {
     throw new AppError('No se pudo eliminar el producto.', 500, error.message);
   }
   return { ok: true };
+}
+
+// Copia un producto completo (precio, categoría, barra) junto con su
+// receta — para no tener que rearmar desde cero variaciones de un mismo
+// plato/cóctel ("Mojito Clásico" -> "Mojito de Fresa").
+export async function duplicarProducto(productoId) {
+  const { data: original, error: errorOriginal } = await supabaseAdmin
+    .from('productos')
+    .select('*, ingredientes:producto_insumos(insumo_id, cantidad)')
+    .eq('id', productoId)
+    .single();
+  if (errorOriginal) throw new AppError('Producto no encontrado.', 404, errorOriginal.message);
+
+  const { id, created_at, updated_at, ingredientes, ...datosBase } = original;
+
+  const { data: copia, error: errorCopia } = await supabaseAdmin
+    .from('productos')
+    .insert({ ...datosBase, nombre: `${original.nombre} (copia)` })
+    .select()
+    .single();
+  if (errorCopia) throw new AppError('No se pudo duplicar el producto.', 500, errorCopia.message);
+
+  if (ingredientes && ingredientes.length) {
+    const filas = ingredientes.map((i) => ({ producto_id: copia.id, insumo_id: i.insumo_id, cantidad: i.cantidad }));
+    await supabaseAdmin.from('producto_insumos').insert(filas);
+  }
+
+  return copia;
 }
 
 export async function listarCategorias(negocioId) {
@@ -180,6 +241,99 @@ export async function crearInsumo(negocioId, payload) {
     .single();
   if (error) throw new AppError('No se pudo crear el insumo.', 500, error.message);
   return data;
+}
+
+// Si el insumo ya está en la receta de algún producto, borrarlo de verdad
+// dañaría esa receta en silencio (el producto dejaría de descontar ese
+// ingrediente sin que nadie se entere). En ese caso, se desactiva en vez
+// de borrarse: desaparece de los selectores para recetas nuevas, pero no
+// rompe nada de lo que ya existe.
+export async function eliminarInsumo(insumoId) {
+  const { data: enUso, error: errorUso } = await supabaseAdmin
+    .from('producto_insumos')
+    .select('producto_id, producto:productos(nombre)')
+    .eq('insumo_id', insumoId);
+  if (errorUso) throw new AppError('No se pudo verificar el uso del insumo.', 500, errorUso.message);
+
+  if (enUso && enUso.length > 0) {
+    const { error: errorDesactivar } = await supabaseAdmin.from('insumos').update({ activo: false }).eq('id', insumoId);
+    if (errorDesactivar) throw new AppError('No se pudo desactivar el insumo.', 500, errorDesactivar.message);
+
+    const nombresProductos = [...new Set(enUso.map((u) => u.producto?.nombre).filter(Boolean))];
+    return {
+      accion: 'desactivado',
+      mensaje: `Este insumo está en la receta de ${nombresProductos.length} producto(s) (${nombresProductos.join(', ')}), así que se desactivó en vez de borrarse — para no dañar esas recetas.`,
+    };
+  }
+
+  const { error } = await supabaseAdmin.from('insumos').delete().eq('id', insumoId);
+  if (error) throw new AppError('No se pudo eliminar el insumo.', 500, error.message);
+  return { accion: 'eliminado', mensaje: 'Insumo eliminado.' };
+}
+
+// Importación masiva de recetas desde CSV: producto, insumo, cantidad.
+// A diferencia de importar productos, acá NADA se crea si falta — el
+// producto y el insumo deben existir de antes (el CSV solo conecta lo
+// que ya está creado). Las filas que no se pudieron aplicar se devuelven
+// con el motivo exacto, para que el admin sepa qué le falta configurar.
+export async function importarRecetas(negocioId, filas) {
+  const [{ data: productos }, { data: insumos }] = await Promise.all([
+    supabaseAdmin.from('productos').select('id, nombre, costo').eq('negocio_id', negocioId),
+    supabaseAdmin.from('insumos').select('id, nombre, costo_unitario').eq('negocio_id', negocioId),
+  ]);
+
+  const buscarPorNombre = (lista, nombre) =>
+    lista.find((x) => x.nombre.trim().toLowerCase() === String(nombre || '').trim().toLowerCase());
+
+  const aplicadas = [];
+  const noAplicadas = [];
+  const productosParaRecalcularCosto = new Set();
+
+  for (const fila of filas) {
+    const producto = buscarPorNombre(productos, fila.producto);
+    const insumo = buscarPorNombre(insumos, fila.insumo);
+
+    if (!producto) {
+      noAplicadas.push({
+        ...fila,
+        motivo: `El producto "${fila.producto}" no existe todavía. Créalo primero en Productos (o impórtalo junto con los demás) y vuelve a subir esta fila.`,
+      });
+      continue;
+    }
+    if (!insumo) {
+      noAplicadas.push({
+        ...fila,
+        motivo: `El insumo "${fila.insumo}" no existe todavía. Créalo primero en Inventario y vuelve a subir esta fila.`,
+      });
+      continue;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('producto_insumos')
+      .upsert({ producto_id: producto.id, insumo_id: insumo.id, cantidad: Number(fila.cantidad) }, { onConflict: 'producto_id,insumo_id' });
+
+    if (error) {
+      noAplicadas.push({ ...fila, motivo: 'No se pudo guardar esta línea, intenta de nuevo.' });
+      continue;
+    }
+
+    aplicadas.push(fila);
+    productosParaRecalcularCosto.add(producto.id);
+  }
+
+  // Recalcula el costo de cada producto que recibió ingredientes nuevos
+  for (const productoId of productosParaRecalcularCosto) {
+    const { data: receta } = await supabaseAdmin
+      .from('producto_insumos')
+      .select('insumo_id, cantidad')
+      .eq('producto_id', productoId);
+    const costoCalculado = await calcularCostoDesdeReceta(receta);
+    if (costoCalculado !== null) {
+      await supabaseAdmin.from('productos').update({ costo: costoCalculado }).eq('id', productoId);
+    }
+  }
+
+  return { totalFilas: filas.length, aplicadas: aplicadas.length, noAplicadas };
 }
 
 // El admin asigna/agrega stock de un insumo a UNA barra específica.

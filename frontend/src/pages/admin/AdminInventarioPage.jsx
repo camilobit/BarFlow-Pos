@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
-import { Plus, TriangleAlert, PackagePlus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, TriangleAlert, PackagePlus, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { productosApi, barrasApi } from '../../services/endpoints.js';
 import Modal from '../../components/common/Modal.jsx';
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import { useConfirm } from '../../hooks/useConfirm.js';
 import { SkeletonLista } from '../../components/common/Skeleton.jsx';
 
 const FORM_VACIO = { nombre: '', unidad: 'unidad', costo_unitario: '' };
@@ -16,6 +18,7 @@ export default function AdminInventarioPage() {
   const [modalAsignar, setModalAsignar] = useState(null); // insumo seleccionado
   const [form, setForm] = useState(FORM_VACIO);
   const [formAsignar, setFormAsignar] = useState(FORM_ASIGNAR);
+  const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
 
   const cargar = useCallback(async () => {
     const [ins, brs] = await Promise.all([productosApi.insumos(), barrasApi.listar()]);
@@ -32,6 +35,27 @@ export default function AdminInventarioPage() {
       toast.success('Insumo creado. Ahora asígnale stock a cada barra.');
       setModalAbierto(false);
       setForm(FORM_VACIO);
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  async function eliminarInsumo(insumo) {
+    const ok = await confirmar({
+      titulo: 'Eliminar insumo',
+      mensaje: `¿Eliminar "${insumo.nombre}"? Si está en uso en alguna receta, se desactivará en vez de borrarse, para no dañar esa receta.`,
+      textoConfirmar: 'Eliminar',
+      peligroso: true,
+    });
+    if (!ok) return;
+    try {
+      const resultado = await productosApi.eliminarInsumo(insumo.id);
+      if (resultado.accion === 'desactivado') {
+        toast.success(resultado.mensaje, { duration: 6000 });
+      } else {
+        toast.success('Insumo eliminado');
+      }
       cargar();
     } catch (err) {
       toast.error(err.message);
@@ -96,8 +120,11 @@ export default function AdminInventarioPage() {
               const abierto = expandido === i.id;
               return (
                 <Fragment key={i.id}>
-                  <tr className="border-b border-mist-100 last:border-0">
-                    <td className="px-4 py-3 font-medium text-ink-900">{i.nombre}</td>
+                  <tr className={`border-b border-mist-100 last:border-0 ${!i.activo && 'opacity-50'}`}>
+                    <td className="px-4 py-3 font-medium text-ink-900">
+                      {i.nombre}
+                      {!i.activo && <span className="badge ml-2 bg-mist-100 text-mist-500">Inactivo</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={hayAlerta ? 'flex items-center gap-1 font-semibold text-red-500' : 'text-ink-800'}>
                         {hayAlerta && <TriangleAlert size={14} />}
@@ -114,6 +141,9 @@ export default function AdminInventarioPage() {
                         </button>
                         <button onClick={() => setExpandido(abierto ? null : i.id)} className="rounded-lg p-1.5 text-mist-400 hover:bg-mist-100">
                           {abierto ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        <button onClick={() => eliminarInsumo(i)} className="btn-icon-danger" aria-label={`Eliminar ${i.nombre}`}>
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -157,9 +187,12 @@ export default function AdminInventarioPage() {
           const hayAlerta = (i.stock_por_barra || []).some((s) => Number(s.stock) <= Number(s.stock_minimo));
           const abierto = expandido === i.id;
           return (
-            <div key={i.id} className="card p-4">
+            <div key={i.id} className={`card p-4 ${!i.activo && 'opacity-60'}`}>
               <div className="mb-2 flex items-start justify-between gap-2">
-                <p className="font-semibold text-ink-900">{i.nombre}</p>
+                <p className="font-semibold text-ink-900">
+                  {i.nombre}
+                  {!i.activo && <span className="badge ml-2 bg-mist-100 text-mist-500">Inactivo</span>}
+                </p>
                 <span className={`shrink-0 text-sm font-bold ${hayAlerta ? 'flex items-center gap-1 text-red-500' : 'text-ink-800'}`}>
                   {hayAlerta && <TriangleAlert size={14} />}
                   {stockTotal} {i.unidad}
@@ -184,12 +217,17 @@ export default function AdminInventarioPage() {
                 </div>
               )}
 
-              <button
-                onClick={() => { setModalAsignar(i); setFormAsignar(FORM_ASIGNAR); }}
-                className="btn-primary w-full !py-2 text-sm"
-              >
-                <PackagePlus size={15} /> Actualizar cantidad
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setModalAsignar(i); setFormAsignar(FORM_ASIGNAR); }}
+                  className="btn-primary flex-1 !py-2 text-sm"
+                >
+                  <PackagePlus size={15} /> Actualizar cantidad
+                </button>
+                <button onClick={() => eliminarInsumo(i)} className="btn-icon-danger border border-mist-200" aria-label={`Eliminar ${i.nombre}`}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -216,6 +254,7 @@ export default function AdminInventarioPage() {
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-mist-500">Costo unitario</label>
               <input type="number" min="0" className="input" value={form.costo_unitario} onChange={(e) => setForm({ ...form, costo_unitario: e.target.value })} />
+              <p className="mt-1 text-xs text-mist-500">Se usa para calcular el costo automático de los productos que lo lleven en su receta.</p>
             </div>
             <p className="text-xs text-mist-500">Después de crearlo, toca "Cantidad" para poner cuántas unidades tiene cada barra.</p>
             <button type="submit" className="btn-primary w-full">Crear insumo</button>
@@ -256,6 +295,8 @@ export default function AdminInventarioPage() {
           </form>
         </Modal>
       )}
+
+      {estaAbierto && <ConfirmDialog {...opciones} onConfirmar={onConfirmar} onCancelar={onCancelar} />}
     </div>
   );
 }

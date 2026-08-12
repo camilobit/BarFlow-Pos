@@ -29,7 +29,9 @@ export const productosApi = {
   listar: (params) => api.get('/productos', { params }).then((r) => r.data),
   crear: (payload) => api.post('/productos', payload).then((r) => r.data),
   importarMasivo: (filas) => api.post('/productos/importar-masivo', { filas }).then((r) => r.data),
+  importarRecetas: (filas) => api.post('/productos/importar-recetas', { filas }).then((r) => r.data),
   actualizar: (id, payload) => api.patch(`/productos/${id}`, payload).then((r) => r.data),
+  duplicar: (id) => api.post(`/productos/${id}/duplicar`).then((r) => r.data),
   eliminar: (id) => api.delete(`/productos/${id}`),
   eliminarPermanente: (id) => api.delete(`/productos/${id}/permanente`),
   categorias: () => api.get('/productos/categorias/todas').then((r) => r.data),
@@ -37,6 +39,7 @@ export const productosApi = {
   eliminarCategoria: (id) => api.delete(`/productos/categorias/${id}`),
   insumos: () => api.get('/productos/insumos/todos').then((r) => r.data),
   crearInsumo: (payload) => api.post('/productos/insumos', payload).then((r) => r.data),
+  eliminarInsumo: (id) => api.delete(`/productos/insumos/${id}`).then((r) => r.data),
   asignarStockBarra: (id, payload) => api.post(`/productos/insumos/${id}/asignar-stock`, payload).then((r) => r.data),
   establecerStockBarra: (id, payload) => api.post(`/productos/insumos/${id}/establecer-stock`, payload).then((r) => r.data),
 };
