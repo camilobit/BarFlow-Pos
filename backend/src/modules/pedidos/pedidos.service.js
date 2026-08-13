@@ -157,10 +157,16 @@ export async function quitarItem(pedidoId, itemId) {
 // Cualquier ítem que ya haya descontado inventario (preparando/listo/
 // entregado) se devuelve a la barra correspondiente, para que el
 // inventario quede exacto como si nunca se hubiera preparado.
-export async function anularPedido(pedidoId) {
+// Cancela SOLO los productos de la barra que hace la acción, y SOLO los
+// que aún no se han entregado — nunca toca productos de otra barra, ni
+// productos que ya se sirvieron (eso sería borrar una venta real, un
+// hueco de seguridad que ya existía y quedó cerrado aquí). Cada barra
+// puede resolver su propia parte del pedido sin depender del admin; si
+// dos barras están involucradas, cada una anula lo suyo por separado.
+export async function anularPedido(pedidoId, barraId) {
   const { data: pedido, error: errorPedido } = await supabaseAdmin
     .from('pedidos')
-    .select('id, estado')
+    .select('id, estado, mesa_id')
     .eq('id', pedidoId)
     .single();
   if (errorPedido || !pedido) throw new AppError('Pedido no encontrado.', 404);
@@ -168,15 +174,26 @@ export async function anularPedido(pedidoId) {
     throw new AppError('Este pedido ya fue cobrado o ya está cancelado — no se puede anular desde aquí.', 409);
   }
 
-  const { data: items } = await supabaseAdmin
+  const { data: itemsDeLaBarra } = await supabaseAdmin
     .from('pedido_items')
-    .select('id, producto_id, cantidad, barra_id, estado')
-    .eq('pedido_id', pedidoId);
+    .select('id, producto_id, cantidad, estado')
+    .eq('pedido_id', pedidoId)
+    .eq('barra_id', barraId)
+    .neq('estado', 'cancelado');
 
-  for (const item of items || []) {
+  if (!itemsDeLaBarra || itemsDeLaBarra.length === 0) {
+    throw new AppError('Tu barra no tiene productos activos en este pedido.', 404);
+  }
+
+  const cancelables = itemsDeLaBarra.filter((i) => i.estado !== 'entregado');
+  if (cancelables.length === 0) {
+    throw new AppError('Todos los productos de tu barra en este pedido ya fueron entregados — no se pueden anular, ya son una venta real.', 409);
+  }
+
+  for (const item of cancelables) {
     // Si nunca pasó por "preparando", nunca se descontó inventario —
     // nada que devolver.
-    if (!['preparando', 'listo', 'entregado'].includes(item.estado) || !item.barra_id) continue;
+    if (!['preparando', 'listo'].includes(item.estado)) continue;
 
     const { data: receta } = await supabaseAdmin
       .from('producto_insumos')
@@ -189,7 +206,7 @@ export async function anularPedido(pedidoId) {
         .from('insumo_stock_barra')
         .select('id, stock')
         .eq('insumo_id', ingrediente.insumo_id)
-        .eq('barra_id', item.barra_id)
+        .eq('barra_id', barraId)
         .maybeSingle();
       if (stockActual) {
         await supabaseAdmin
@@ -200,16 +217,68 @@ export async function anularPedido(pedidoId) {
     }
   }
 
-  await supabaseAdmin.from('pedido_items').update({ estado: 'cancelado' }).eq('pedido_id', pedidoId);
-  await supabaseAdmin.from('pedidos').update({ estado: 'cancelado' }).eq('id', pedidoId);
+  await supabaseAdmin
+    .from('pedido_items')
+    .update({ estado: 'cancelado' })
+    .in('id', cancelables.map((i) => i.id));
 
-  // Libera la mesa si el pedido estaba asociado a una
-  const { data: pedidoConMesa } = await supabaseAdmin.from('pedidos').select('mesa_id').eq('id', pedidoId).single();
-  if (pedidoConMesa?.mesa_id) {
-    await supabaseAdmin.from('mesas').update({ estado: 'libre' }).eq('id', pedidoConMesa.mesa_id);
+  // Recalcula el estado del pedido con lo que queda: si TODO terminó
+  // cancelado (incluyendo lo de otras barras), el pedido se cancela y
+  // libera la mesa; si queda algo entregado o en curso, el pedido sigue
+  // vivo con lo que sí se puede cobrar.
+  const { data: itemsRestantes } = await supabaseAdmin
+    .from('pedido_items')
+    .select('estado')
+    .eq('pedido_id', pedidoId)
+    .neq('estado', 'cancelado');
+
+  if (!itemsRestantes || itemsRestantes.length === 0) {
+    await supabaseAdmin.from('pedidos').update({ estado: 'cancelado' }).eq('id', pedidoId);
+    if (pedido.mesa_id) {
+      await supabaseAdmin.from('mesas').update({ estado: 'libre' }).eq('id', pedido.mesa_id);
+    }
+  } else {
+    await sincronizarEstadoPedido(pedidoId);
   }
 
-  return { ok: true };
+  return { ok: true, productosAnulados: cancelables.length };
+}
+
+const ORDEN_ESTADO = { pendiente: 0, preparando: 1, listo: 2, entregado: 3 };
+const SIGUIENTE_ESTADO_ITEM = { pendiente: 'preparando', preparando: 'listo', listo: 'entregado' };
+
+// Un solo botón para TODOS los productos que le corresponden a una barra
+// dentro de un pedido — en vez de un botón por producto. Si el grupo está
+// parejo (lo normal), los mueve a todos juntos al siguiente estado. Si
+// quedó mezclado (ej. se agregó un producto nuevo mientras otro ya iba
+// más adelante), avanza primero a los que van más atrás, para que un
+// segundo clic termine de emparejar al resto.
+export async function avanzarEstadoPorBarra(pedidoId, barraId) {
+  const { data: items, error } = await supabaseAdmin
+    .from('pedido_items')
+    .select('id, estado')
+    .eq('pedido_id', pedidoId)
+    .eq('barra_id', barraId)
+    .neq('estado', 'cancelado');
+  if (error) throw new AppError('No se pudo leer el pedido.', 500, error.message);
+
+  const activos = (items || []).filter((i) => i.estado !== 'entregado');
+  if (activos.length === 0) {
+    throw new AppError('Los productos de tu barra en este pedido ya están entregados.', 409);
+  }
+
+  const estadoMenosAvanzado = activos.reduce(
+    (min, i) => (ORDEN_ESTADO[i.estado] < ORDEN_ESTADO[min] ? i.estado : min),
+    activos[0].estado
+  );
+  const siguiente = SIGUIENTE_ESTADO_ITEM[estadoMenosAvanzado];
+  const idsAAvanzar = activos.filter((i) => i.estado === estadoMenosAvanzado).map((i) => i.id);
+
+  const { error: errorUpdate } = await supabaseAdmin.from('pedido_items').update({ estado: siguiente }).in('id', idsAAvanzar);
+  if (errorUpdate) throw new AppError('No se pudo actualizar el pedido.', 500, errorUpdate.message);
+
+  await sincronizarEstadoPedido(pedidoId);
+  return obtenerPedidoPorId(pedidoId);
 }
 
 export async function actualizarEstadoItem(itemId, estado) {

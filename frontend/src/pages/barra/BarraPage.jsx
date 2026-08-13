@@ -19,6 +19,7 @@ const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency:
 
 const SIGUIENTE_ESTADO = { pendiente: 'preparando', preparando: 'listo', listo: 'entregado' };
 const ETIQUETA_ACCION = { pendiente: 'Empezar', preparando: 'Marcar listo', listo: 'Entregar' };
+const ORDEN_ESTADO = { pendiente: 0, preparando: 1, listo: 2, entregado: 3 };
 const COLOR_ESTADO = {
   pendiente: 'bg-mist-100 text-mist-500 border-mist-200',
   preparando: 'bg-gold-200 text-gold-600 border-gold-400',
@@ -143,11 +144,11 @@ export default function BarraPage() {
   });
   useRealtimeTable({ table: 'movimientos_inventario', onChange: cargarMovimientos, enabled: !!barraId });
 
-  async function avanzarEstado(item) {
-    const siguiente = SIGUIENTE_ESTADO[item.estado];
-    if (!siguiente) return;
+  // Un solo botón mueve TODOS los productos de tu barra en este pedido al
+  // siguiente paso — ya no hay que darle a cada producto por separado.
+  async function avanzarGrupo(pedidoId) {
     try {
-      await pedidosApi.actualizarEstadoItem(item.id, siguiente);
+      await pedidosApi.avanzarPorBarra(pedidoId, barraId);
       cargarItems();
     } catch (err) {
       toast.error(err.message);
@@ -173,20 +174,23 @@ export default function BarraPage() {
     }
   }
 
-  // Anula el PEDIDO COMPLETO — funciona incluso después de despachado
-  // (ej. el cliente devuelve todo el pedido), mientras no se haya
-  // cobrado todavía. Revierte el inventario que ya se hubiera descontado.
+  // Anula SOLO los productos de TU barra en este pedido, y SOLO los que
+  // aún no se han entregado (lo ya servido es una venta real, nunca se
+  // toca). Cualquier barra resuelve su propia parte sin depender del
+  // admin — si el pedido tiene otra barra involucrada, esa barra anula
+  // la suya por separado. Devuelve al inventario lo que ya se hubiera
+  // descontado.
   async function anularPedido(pedidoId) {
     const ok = await confirmar({
-      titulo: 'Anular pedido completo',
-      mensaje: 'Esto anula TODO el pedido (todos sus productos), y devuelve al inventario lo que ya se hubiera descontado. No se puede deshacer.',
-      textoConfirmar: 'Anular pedido',
+      titulo: 'Anular mis productos de este pedido',
+      mensaje: 'Esto anula los productos de TU barra en este pedido que aún no se han entregado, y devuelve al inventario lo que ya se hubiera descontado. Lo ya entregado no se toca. No se puede deshacer.',
+      textoConfirmar: 'Anular',
       peligroso: true,
     });
     if (!ok) return;
     try {
-      await pedidosApi.anular(pedidoId);
-      toast.success('Pedido anulado');
+      await pedidosApi.anular(pedidoId, barraId);
+      toast.success('Productos anulados');
       cargarItems();
       cargarPorCobrar();
     } catch (err) {
@@ -424,39 +428,46 @@ export default function BarraPage() {
                       {itemsPedido.map((item) => {
                         const entregado = item.estado === 'entregado';
                         return (
-                          <div key={item.id} className={`rounded-xl border p-2.5 ${COLOR_ESTADO[item.estado]} bg-opacity-10`}>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-bold text-white">{item.cantidad}× {item.producto?.nombre}</p>
-                                {item.observaciones && <p className="mt-0.5 text-xs text-gold-400">{item.observaciones}</p>}
-                              </div>
-                              <span className={`badge shrink-0 border ${COLOR_ESTADO[item.estado]}`}>
+                          <div key={item.id} className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 ${COLOR_ESTADO[item.estado]} bg-opacity-10`}>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-bold text-white">{item.cantidad}× {item.producto?.nombre}</p>
+                              {item.observaciones && <p className="mt-0.5 text-xs text-gold-400">{item.observaciones}</p>}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <span className={`badge border ${COLOR_ESTADO[item.estado]}`}>
                                 {item.estado === 'preparando' && <Flame size={11} />}
                                 {entregado && <CheckCircle2 size={11} />}
                                 {item.estado}
                               </span>
+                              {!entregado && (
+                                <button onClick={() => cancelarItem(item)} className="rounded-lg p-1 text-mist-400 hover:text-red-400" aria-label={`Cancelar ${item.producto?.nombre}`}>
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
                             </div>
-                            {!entregado && (
-                              <div className="mt-2 flex gap-1.5">
-                                <button onClick={() => avanzarEstado(item)} className="btn-primary flex-1 !py-1.5 text-xs">
-                                  {ETIQUETA_ACCION[item.estado]}
-                                </button>
-                                <button onClick={() => cancelarItem(item)} className="rounded-lg border border-ink-800 p-1.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label={`Cancelar ${item.producto?.nombre}`}>
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
                     </div>
 
-                    <button
-                      onClick={() => anularPedido(pedido.id)}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-ink-800 p-2.5 text-sm font-semibold text-mist-400 hover:border-red-500 hover:text-red-400"
-                    >
-                      <Ban size={15} /> Anular pedido completo
-                    </button>
+                    {todoEntregado ? (
+                      <p className="rounded-xl bg-ink-800 px-3 py-2.5 text-center text-xs text-mist-400">
+                        Ya entregado — esperando que se cobre
+                      </p>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button onClick={() => avanzarGrupo(pedido.id)} className="btn-primary flex-1">
+                          {ETIQUETA_ACCION[itemsPedido.reduce((min, i) => (ORDEN_ESTADO[i.estado] < ORDEN_ESTADO[min] ? i.estado : min), itemsPedido[0].estado)]}
+                        </button>
+                        <button
+                          onClick={() => anularPedido(pedido.id)}
+                          className="flex items-center justify-center gap-1.5 rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400"
+                          aria-label="Anular mis productos de este pedido"
+                        >
+                          <Ban size={16} />
+                        </button>
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -492,7 +503,7 @@ export default function BarraPage() {
                       <button onClick={() => navigate(`/mesero/pedido/${pedido.id}`)} className="btn-gold flex-1">
                         <Receipt size={16} /> Cobrar ahora
                       </button>
-                      <button onClick={() => anularPedido(pedido.id)} className="rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Anular pedido completo">
+                      <button onClick={() => anularPedido(pedido.id)} className="rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Anular mis productos de este pedido">
                         <Ban size={16} />
                       </button>
                     </div>

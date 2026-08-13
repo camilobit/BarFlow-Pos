@@ -6,7 +6,8 @@ export const pedidosApi = {
   crear: (payload) => api.post('/pedidos', payload).then((r) => r.data),
   agregarItems: (id, items, barra_destino_id) => api.post(`/pedidos/${id}/items`, { items, barra_destino_id }).then((r) => r.data),
   quitarItem: (id, itemId) => api.delete(`/pedidos/${id}/items/${itemId}`).then((r) => r.data),
-  anular: (id) => api.post(`/pedidos/${id}/anular`).then((r) => r.data),
+  anular: (id, barraId) => api.post(`/pedidos/${id}/anular`, { barra_id: barraId }).then((r) => r.data),
+  avanzarPorBarra: (id, barraId) => api.patch(`/pedidos/${id}/avanzar-por-barra`, { barra_id: barraId }).then((r) => r.data),
   actualizarEstadoItem: (itemId, estado) => api.patch(`/pedidos/items/${itemId}/estado`, { estado }).then((r) => r.data),
   cambiarMesa: (id, mesa_id) => api.patch(`/pedidos/${id}/mesa`, { mesa_id }).then((r) => r.data),
   combinarMesas: (mesa_principal_id, mesas_secundarias_ids) =>

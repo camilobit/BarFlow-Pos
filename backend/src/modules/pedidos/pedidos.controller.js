@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../middlewares/errorHandler.middleware.js';
 import { registrarAuditoria } from '../../utils/auditoria.js';
 import { response } from '../../utils/response.utils.js';
+import { AppError } from '../../utils/AppError.js';
 import * as pedidosService from './pedidos.service.js';
 
 export const crear = asyncHandler(async (req, res) => {
@@ -57,8 +58,25 @@ export const agregarItems = asyncHandler(async (req, res) => {
 });
 
 export const anular = asyncHandler(async (req, res) => {
-  await pedidosService.anularPedido(req.params.id);
-  return response.success(res, null, 'Pedido anulado');
+  const { barra_id } = req.body;
+  if (!barra_id) throw new AppError('Falta indicar la barra que está anulando.', 422);
+  const resultado = await pedidosService.anularPedido(req.params.id, barra_id);
+  await registrarAuditoria({
+    negocioId: req.usuario.negocio_id,
+    usuarioId: req.usuario.id,
+    accion: 'anular_pedido_parcial',
+    entidad: 'pedido',
+    entidadId: req.params.id,
+    detalle: { barra_id, productos_anulados: resultado.productosAnulados },
+  });
+  return response.success(res, resultado, `${resultado.productosAnulados} producto(s) anulado(s)`);
+});
+
+export const avanzarEstadoPorBarra = asyncHandler(async (req, res) => {
+  const { barra_id } = req.body;
+  if (!barra_id) throw new AppError('Falta indicar la barra.', 422);
+  const pedido = await pedidosService.avanzarEstadoPorBarra(req.params.id, barra_id);
+  return response.success(res, pedido, 'Estado actualizado');
 });
 
 export const quitarItem = asyncHandler(async (req, res) => {
