@@ -91,3 +91,34 @@ export const establecerStockBarra = asyncHandler(async (req, res) => {
   const resultado = await productosService.establecerStockBarra(req.usuario.negocio_id, req.params.id, barra_id, cantidad, stock_minimo);
   return response.success(res, resultado, 'Cantidad actualizada');
 });
+
+export const crearMovimiento = asyncHandler(async (req, res) => {
+  const movimiento = await productosService.crearMovimientoInventario(req.usuario.negocio_id, req.usuario.id, req.body);
+  return response.created(res, movimiento, 'Traslado enviado — falta que la otra barra lo acepte');
+});
+
+export const movimientosPendientes = asyncHandler(async (req, res) => {
+  const data = await productosService.listarMovimientosPendientes(req.usuario.negocio_id, req.query.barra_id);
+  return response.success(res, data);
+});
+
+export const movimientosEnviados = asyncHandler(async (req, res) => {
+  const data = await productosService.listarMovimientosEnviados(req.usuario.negocio_id, req.query.barra_id);
+  return response.success(res, data);
+});
+
+export const aceptarMovimiento = asyncHandler(async (req, res) => {
+  const movimiento = await productosService.aceptarMovimientoInventario(req.params.id, req.usuario.id);
+  return response.success(res, movimiento, 'Traslado aceptado — ya quedó en tu inventario');
+});
+
+export const rechazarMovimiento = asyncHandler(async (req, res) => {
+  const movimiento = await productosService.rechazarMovimientoInventario(req.params.id, req.usuario.id);
+  return response.success(res, movimiento, 'Traslado rechazado — se devolvió a la barra que lo envió');
+});
+
+export const historialMovimientos = asyncHandler(async (req, res) => {
+  const { desde, hasta } = req.query;
+  const data = await productosService.listarMovimientosNegocio(req.usuario.negocio_id, { desde, hasta });
+  return response.success(res, data);
+});

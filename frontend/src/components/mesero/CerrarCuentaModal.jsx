@@ -11,15 +11,18 @@ const METODOS = [
   { valor: 'mixto', etiqueta: 'Mixto' },
 ];
 
-// barras: lista de barras del negocio (para elegir a cuál caja se entrega
-// el dinero). barraSugerida: la barra de la que más productos salieron en
-// este pedido, para preseleccionarla y ahorrarle el clic al mesero.
+// barras: lista de barras del negocio (para mostrar el nombre de la que
+// va a recibir el pago). barraSugerida: la barra de la que salieron los
+// productos de este pedido — el mesero ya NO puede elegir otra, el dinero
+// siempre va a la caja que despachó el pedido.
 export default function CerrarCuentaModal({ pedido, barras = [], barraSugerida, onClose, onSuccess }) {
   const [metodo, setMetodo] = useState('efectivo');
   const [propina, setPropina] = useState(0);
   const [descuento, setDescuento] = useState(0);
-  const [barraId, setBarraId] = useState(barraSugerida || barras[0]?.id || '');
   const [enviando, setEnviando] = useState(false);
+
+  const barraId = barraSugerida || barras[0]?.id || '';
+  const nombreBarra = barras.find((b) => b.id === barraId)?.nombre;
 
   const total = pedido.subtotal - descuento + Number(propina || 0);
 
@@ -52,15 +55,10 @@ export default function CerrarCuentaModal({ pedido, barras = [], barraSugerida, 
         </div>
       </div>
 
-      {barras.length > 1 && (
-        <div className="mb-4">
-          <label className="label" htmlFor="cerrar-cuenta-barra">¿A qué caja entregas el dinero?</label>
-          <select id="cerrar-cuenta-barra" className="select" value={barraId} onChange={(e) => setBarraId(e.target.value)}>
-            {barras.map((b) => (
-              <option key={b.id} value={b.id}>{b.nombre}</option>
-            ))}
-          </select>
-        </div>
+      {nombreBarra && (
+        <p className="mb-4 text-xs text-mist-500">
+          El pago se entrega en la caja de <span className="font-semibold text-ink-800">{nombreBarra}</span> (la barra que despachó este pedido).
+        </p>
       )}
 
       <fieldset className="mb-4">

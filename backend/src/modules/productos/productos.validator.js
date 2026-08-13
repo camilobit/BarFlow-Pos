@@ -53,3 +53,11 @@ export const establecerStockSchema = z.object({
   cantidad: z.number().nonnegative(),
   stock_minimo: z.number().nonnegative().optional(),
 });
+
+export const crearMovimientoSchema = z.object({
+  insumo_id: z.string().uuid(),
+  barra_origen_id: z.string().uuid(),
+  barra_destino_id: z.string().uuid(),
+  cantidad: z.number().positive(),
+  nota: z.string().max(300).optional(),
+});

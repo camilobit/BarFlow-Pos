@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
-import { Plus, TriangleAlert, PackagePlus, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Plus, TriangleAlert, PackagePlus, ChevronDown, ChevronUp, Trash2, ArrowLeftRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { productosApi, barrasApi } from '../../services/endpoints.js';
+import { productosApi, barrasApi, movimientosApi } from '../../services/endpoints.js';
 import Modal from '../../components/common/Modal.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import { useConfirm } from '../../hooks/useConfirm.js';
@@ -15,6 +15,8 @@ export default function AdminInventarioPage() {
   const [barras, setBarras] = useState([]);
   const [expandido, setExpandido] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [modalHistorial, setModalHistorial] = useState(false);
+  const [historial, setHistorial] = useState(null);
   const [modalAsignar, setModalAsignar] = useState(null); // insumo seleccionado
   const [form, setForm] = useState(FORM_VACIO);
   const [formAsignar, setFormAsignar] = useState(FORM_ASIGNAR);
@@ -27,6 +29,11 @@ export default function AdminInventarioPage() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  async function abrirHistorial() {
+    setModalHistorial(true);
+    setHistorial(await movimientosApi.historial());
+  }
 
   async function crearInsumo(e) {
     e.preventDefault();
@@ -100,7 +107,10 @@ export default function AdminInventarioPage() {
           <h1 className="font-display text-2xl font-bold text-ink-900">Inventario</h1>
           <p className="text-sm text-mist-500">Cada insumo se asigna con una cantidad específica a cada barra</p>
         </div>
-        <button onClick={() => setModalAbierto(true)} className="btn-primary"><Plus size={16} /> Nuevo insumo</button>
+        <div className="flex gap-2">
+          <button onClick={abrirHistorial} className="btn-secondary"><ArrowLeftRight size={16} /> Historial de traslados</button>
+          <button onClick={() => setModalAbierto(true)} className="btn-primary"><Plus size={16} /> Nuevo insumo</button>
+        </div>
       </div>
 
       {/* Escritorio: tabla expandible */}
@@ -293,6 +303,37 @@ export default function AdminInventarioPage() {
             </div>
             <button type="submit" className="btn-primary w-full" disabled={!formAsignar.barra_id}>Guardar cantidad</button>
           </form>
+        </Modal>
+      )}
+
+      {modalHistorial && (
+        <Modal title="Historial de traslados entre barras" onClose={() => setModalHistorial(false)} maxWidth="max-w-2xl">
+          {!historial ? (
+            <p className="py-6 text-center text-sm text-mist-500">Cargando…</p>
+          ) : historial.length === 0 ? (
+            <p className="py-6 text-center text-sm text-mist-500">Todavía no se ha hecho ningún traslado entre barras.</p>
+          ) : (
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto">
+              {historial.map((mov) => (
+                <div key={mov.id} className="rounded-xl border border-mist-200 p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-ink-900">
+                      {mov.barra_origen?.nombre} → {mov.barra_destino?.nombre}
+                    </p>
+                    <span className={`badge ${mov.estado === 'aceptado' ? 'bg-petrol-100 text-petrol-700' : mov.estado === 'rechazado' ? 'bg-red-100 text-red-600' : 'bg-gold-200 text-gold-600'}`}>
+                      {mov.estado}
+                    </span>
+                  </div>
+                  <p className="text-xs text-mist-600">{mov.cantidad} {mov.insumo?.unidad} de {mov.insumo?.nombre}</p>
+                  <p className="mt-1 text-xs text-mist-400">
+                    Enviado por {mov.solicitante?.nombre} el {new Date(mov.created_at).toLocaleString('es-CO')}
+                    {mov.resolutor && ` · ${mov.estado === 'aceptado' ? 'Aceptado' : 'Rechazado'} por ${mov.resolutor.nombre}`}
+                  </p>
+                  {mov.nota && <p className="mt-1 text-xs italic text-mist-500">"{mov.nota}"</p>}
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
 

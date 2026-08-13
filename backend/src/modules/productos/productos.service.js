@@ -416,3 +416,168 @@ export async function establecerStockBarra(negocioId, insumoId, barraId, nuevaCa
   if (error) throw new AppError('No se pudo actualizar el stock.', 500, error.message);
   return data;
 }
+
+// =========================================================================
+// Traslados de inventario entre barras — movimiento cerrado (no crea ni
+// destruye stock, solo lo reubica), con un paso de aceptación: la barra
+// origen envía (se descuenta de inmediato, "ya salió del mostrador"), y la
+// barra destino tiene que aceptar para que aparezca en su inventario.
+// =========================================================================
+
+const SELECT_MOVIMIENTO = `
+  *,
+  insumo:insumos(id, nombre, unidad),
+  barra_origen:barras!movimientos_inventario_barra_origen_id_fkey(id, nombre),
+  barra_destino:barras!movimientos_inventario_barra_destino_id_fkey(id, nombre),
+  solicitante:usuarios!movimientos_inventario_solicitado_por_fkey(id, nombre),
+  resolutor:usuarios!movimientos_inventario_resuelto_por_fkey(id, nombre)
+`;
+
+export async function crearMovimientoInventario(negocioId, usuarioId, { insumo_id, barra_origen_id, barra_destino_id, cantidad, nota }) {
+  if (barra_origen_id === barra_destino_id) {
+    throw new AppError('La barra origen y la barra destino no pueden ser la misma.', 422);
+  }
+
+  const { data: stockOrigen, error: errorStock } = await supabaseAdmin
+    .from('insumo_stock_barra')
+    .select('id, stock')
+    .eq('insumo_id', insumo_id)
+    .eq('barra_id', barra_origen_id)
+    .maybeSingle();
+  if (errorStock) throw new AppError('No se pudo verificar el stock de origen.', 500, errorStock.message);
+  if (!stockOrigen || Number(stockOrigen.stock) < Number(cantidad)) {
+    throw new AppError(`No hay suficiente stock en tu barra para enviar esa cantidad (tienes ${stockOrigen?.stock ?? 0}).`, 409);
+  }
+
+  // Se descuenta de inmediato de la barra que envía — refleja que
+  // físicamente ya salió de su mostrador, aunque la otra barra todavía
+  // no lo haya confirmado recibido.
+  await supabaseAdmin.from('insumo_stock_barra').update({ stock: Number(stockOrigen.stock) - Number(cantidad) }).eq('id', stockOrigen.id);
+
+  const { data, error } = await supabaseAdmin
+    .from('movimientos_inventario')
+    .insert({
+      negocio_id: negocioId,
+      insumo_id,
+      barra_origen_id,
+      barra_destino_id,
+      cantidad,
+      nota: nota || null,
+      solicitado_por: usuarioId,
+    })
+    .select(SELECT_MOVIMIENTO)
+    .single();
+  if (error) throw new AppError('No se pudo registrar el traslado.', 500, error.message);
+  return data;
+}
+
+export async function listarMovimientosPendientes(negocioId, barraDestinoId) {
+  const { data, error } = await supabaseAdmin
+    .from('movimientos_inventario')
+    .select(SELECT_MOVIMIENTO)
+    .eq('negocio_id', negocioId)
+    .eq('barra_destino_id', barraDestinoId)
+    .eq('estado', 'pendiente')
+    .order('created_at', { ascending: true });
+  if (error) throw new AppError('No se pudieron obtener los traslados pendientes.', 500, error.message);
+  return data;
+}
+
+// Lo que YO envié y sigue esperando que la otra barra lo acepte — para
+// que el cajero sepa que ya salió de su stock aunque no se haya
+// confirmado del otro lado todavía.
+export async function listarMovimientosEnviados(negocioId, barraOrigenId) {
+  const { data, error } = await supabaseAdmin
+    .from('movimientos_inventario')
+    .select(SELECT_MOVIMIENTO)
+    .eq('negocio_id', negocioId)
+    .eq('barra_origen_id', barraOrigenId)
+    .eq('estado', 'pendiente')
+    .order('created_at', { ascending: true });
+  if (error) throw new AppError('No se pudieron obtener los traslados enviados.', 500, error.message);
+  return data;
+}
+
+export async function aceptarMovimientoInventario(movimientoId, usuarioId) {
+  const { data: mov, error: errorMov } = await supabaseAdmin
+    .from('movimientos_inventario')
+    .select('id, negocio_id, insumo_id, barra_destino_id, cantidad, estado')
+    .eq('id', movimientoId)
+    .single();
+  if (errorMov || !mov) throw new AppError('Traslado no encontrado.', 404);
+  if (mov.estado !== 'pendiente') throw new AppError('Este traslado ya fue resuelto.', 409);
+
+  const { data: stockDestino } = await supabaseAdmin
+    .from('insumo_stock_barra')
+    .select('id, stock')
+    .eq('insumo_id', mov.insumo_id)
+    .eq('barra_id', mov.barra_destino_id)
+    .maybeSingle();
+
+  if (stockDestino) {
+    await supabaseAdmin.from('insumo_stock_barra').update({ stock: Number(stockDestino.stock) + Number(mov.cantidad) }).eq('id', stockDestino.id);
+  } else {
+    await supabaseAdmin.from('insumo_stock_barra').insert({
+      negocio_id: mov.negocio_id,
+      insumo_id: mov.insumo_id,
+      barra_id: mov.barra_destino_id,
+      stock: mov.cantidad,
+      stock_minimo: 0,
+    });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('movimientos_inventario')
+    .update({ estado: 'aceptado', resuelto_por: usuarioId, resuelto_at: new Date().toISOString() })
+    .eq('id', movimientoId)
+    .select(SELECT_MOVIMIENTO)
+    .single();
+  if (error) throw new AppError('No se pudo aceptar el traslado.', 500, error.message);
+  return data;
+}
+
+export async function rechazarMovimientoInventario(movimientoId, usuarioId) {
+  const { data: mov, error: errorMov } = await supabaseAdmin
+    .from('movimientos_inventario')
+    .select('id, insumo_id, barra_origen_id, cantidad, estado')
+    .eq('id', movimientoId)
+    .single();
+  if (errorMov || !mov) throw new AppError('Traslado no encontrado.', 404);
+  if (mov.estado !== 'pendiente') throw new AppError('Este traslado ya fue resuelto.', 409);
+
+  // Se devuelve la cantidad a la barra que lo había enviado.
+  const { data: stockOrigen } = await supabaseAdmin
+    .from('insumo_stock_barra')
+    .select('id, stock')
+    .eq('insumo_id', mov.insumo_id)
+    .eq('barra_id', mov.barra_origen_id)
+    .maybeSingle();
+  if (stockOrigen) {
+    await supabaseAdmin.from('insumo_stock_barra').update({ stock: Number(stockOrigen.stock) + Number(mov.cantidad) }).eq('id', stockOrigen.id);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('movimientos_inventario')
+    .update({ estado: 'rechazado', resuelto_por: usuarioId, resuelto_at: new Date().toISOString() })
+    .eq('id', movimientoId)
+    .select(SELECT_MOVIMIENTO)
+    .single();
+  if (error) throw new AppError('No se pudo rechazar el traslado.', 500, error.message);
+  return data;
+}
+
+// Historial completo para el admin — para el cierre de inventario, así
+// se sabe si una barra bajó de stock porque vendió o porque lo trasladó.
+export async function listarMovimientosNegocio(negocioId, { desde, hasta } = {}) {
+  let query = supabaseAdmin
+    .from('movimientos_inventario')
+    .select(SELECT_MOVIMIENTO)
+    .eq('negocio_id', negocioId)
+    .order('created_at', { ascending: false });
+  if (desde) query = query.gte('created_at', desde);
+  if (hasta) query = query.lte('created_at', hasta);
+
+  const { data, error } = await query;
+  if (error) throw new AppError('No se pudo obtener el historial de traslados.', 500, error.message);
+  return data;
+}

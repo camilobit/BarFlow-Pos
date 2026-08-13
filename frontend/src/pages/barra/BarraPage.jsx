@@ -2,11 +2,11 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound,
-  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt, Ban,
+  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt, Ban, ArrowLeftRight, Check, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { pedidosApi, barrasApi, cajaApi } from '../../services/endpoints.js';
+import { pedidosApi, barrasApi, cajaApi, productosApi, movimientosApi } from '../../services/endpoints.js';
 import { useRealtimeTable } from '../../hooks/useRealtimeTable.js';
 import LoadingScreen from '../../components/common/LoadingScreen.jsx';
 import Modal from '../../components/common/Modal.jsx';
@@ -30,6 +30,7 @@ export default function BarraPage() {
   const { perfil, cerrarSesion } = useAuth();
   const navigate = useNavigate();
   const [barras, setBarras] = useState([]);
+  const [todasLasBarras, setTodasLasBarras] = useState([]);
   const [barraId, setBarraId] = useState(null);
   const [items, setItems] = useState([]);
   const [pagosPendientes, setPagosPendientes] = useState([]);
@@ -37,14 +38,20 @@ export default function BarraPage() {
   const [caja, setCaja] = useState(undefined);
   const [estadisticas, setEstadisticas] = useState(null);
   const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
-  const [tab, setTab] = useState('pedidos'); // pedidos | cobros | caja | estadisticas
+  const [tab, setTab] = useState('pedidos'); // pedidos | cobros | traslados | caja | estadisticas
   const [cargando, setCargando] = useState(true);
   const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
   const [modalCerrarCaja, setModalCerrarCaja] = useState(false);
   const [modalPassword, setModalPassword] = useState(false);
+  const [modalNuevoTraslado, setModalNuevoTraslado] = useState(false);
   const [montoInicial, setMontoInicial] = useState('');
   const [montoFinal, setMontoFinal] = useState('');
+  const [insumos, setInsumos] = useState([]);
+  const [movPendientes, setMovPendientes] = useState([]);
+  const [movEnviados, setMovEnviados] = useState([]);
+  const [formTraslado, setFormTraslado] = useState({ insumo_id: '', barra_destino_id: '', cantidad: '', nota: '' });
+  const [enviandoTraslado, setEnviandoTraslado] = useState(false);
 
   const cargarBarras = useCallback(async () => {
     const data = await barrasApi.listar();
@@ -52,6 +59,7 @@ export default function BarraPage() {
     // solo ve esa barra — no puede cambiar a otra desde la interfaz.
     const disponibles = perfil.barra_id ? data.filter((b) => b.id === perfil.barra_id) : data;
     setBarras(disponibles);
+    setTodasLasBarras(data); // sin filtrar — para elegir destino de un traslado
     if (disponibles.length && !barraId) setBarraId(perfil.barra_id || disponibles[0].id);
   }, [barraId, perfil.barra_id]);
 
@@ -108,9 +116,24 @@ export default function BarraPage() {
     }
   }, [barraId]);
 
+  const cargarInsumos = useCallback(async () => {
+    setInsumos(await productosApi.insumos());
+  }, []);
+
+  const cargarMovimientos = useCallback(async () => {
+    if (!barraId) return;
+    const [pendientes, enviados] = await Promise.all([
+      movimientosApi.pendientes(barraId),
+      movimientosApi.enviados(barraId),
+    ]);
+    setMovPendientes(pendientes);
+    setMovEnviados(enviados);
+  }, [barraId]);
+
   useEffect(() => { cargarBarras(); }, [cargarBarras]);
-  useEffect(() => { cargarItems(); cargarPagosPendientes(); cargarCaja(); cargarPorCobrar(); }, [cargarItems, cargarPagosPendientes, cargarCaja, cargarPorCobrar]);
+  useEffect(() => { cargarItems(); cargarPagosPendientes(); cargarCaja(); cargarPorCobrar(); cargarMovimientos(); }, [cargarItems, cargarPagosPendientes, cargarCaja, cargarPorCobrar, cargarMovimientos]);
   useEffect(() => { if (tab === 'estadisticas') cargarEstadisticas(); }, [tab, cargarEstadisticas]);
+  useEffect(() => { if (tab === 'traslados' && insumos.length === 0) cargarInsumos(); }, [tab, insumos.length, cargarInsumos]);
 
   useRealtimeTable({ table: 'pedido_items', filter: barraId ? `barra_id=eq.${barraId}` : undefined, onChange: cargarItems, enabled: !!barraId });
   useRealtimeTable({
@@ -118,6 +141,7 @@ export default function BarraPage() {
     onChange: () => { cargarItems(); cargarPagosPendientes(); cargarPorCobrar(); if (tab === 'estadisticas') cargarEstadisticas(); },
     enabled: !!barraId,
   });
+  useRealtimeTable({ table: 'movimientos_inventario', onChange: cargarMovimientos, enabled: !!barraId });
 
   async function avanzarEstado(item) {
     const siguiente = SIGUIENTE_ESTADO[item.estado];
@@ -206,9 +230,74 @@ export default function BarraPage() {
     }
   }
 
+  async function enviarTraslado(e) {
+    e.preventDefault();
+    setEnviandoTraslado(true);
+    try {
+      await movimientosApi.crear({
+        insumo_id: formTraslado.insumo_id,
+        barra_origen_id: barraId,
+        barra_destino_id: formTraslado.barra_destino_id,
+        cantidad: Number(formTraslado.cantidad),
+        nota: formTraslado.nota || undefined,
+      });
+      toast.success('Traslado enviado — falta que la otra barra lo acepte');
+      setModalNuevoTraslado(false);
+      setFormTraslado({ insumo_id: '', barra_destino_id: '', cantidad: '', nota: '' });
+      cargarMovimientos();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setEnviandoTraslado(false);
+    }
+  }
+
+  async function aceptarTraslado(mov) {
+    try {
+      await movimientosApi.aceptar(mov.id);
+      toast.success(`${mov.cantidad} ${mov.insumo?.unidad} de ${mov.insumo?.nombre} sumadas a tu inventario`);
+      cargarMovimientos();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  async function rechazarTraslado(mov) {
+    const ok = await confirmar({
+      titulo: 'Rechazar traslado',
+      mensaje: `¿Rechazar este envío de ${mov.cantidad} ${mov.insumo?.unidad} de ${mov.insumo?.nombre}? Se le devuelve a ${mov.barra_origen?.nombre}.`,
+      textoConfirmar: 'Rechazar',
+      peligroso: true,
+    });
+    if (!ok) return;
+    try {
+      await movimientosApi.rechazar(mov.id);
+      toast.success('Traslado rechazado');
+      cargarMovimientos();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  const insumoSeleccionado = insumos.find((i) => i.id === formTraslado.insumo_id);
+  const stockDisponibleEnviar = insumoSeleccionado?.stock_por_barra?.find((s) => s.barra_id === barraId)?.stock ?? 0;
+
   // "Cobros" unifica dos cosas que antes eran pestañas separadas y se
   // sentían redundantes: pedidos de mesero pagados y sin verificar, y
   // pedidos nativos de barra ya servidos pero aún no cobrados.
+  // Una tarjeta por PEDIDO, no por producto — un pedido de 10 productos se
+  // ve como una sola tarjeta con 10 líneas, no como 10 tarjetas sueltas.
+  const pedidosAgrupados = useMemo(() => {
+    const grupos = new Map();
+    for (const item of items) {
+      const id = item.pedido?.id;
+      if (!id) continue;
+      if (!grupos.has(id)) grupos.set(id, { pedido: item.pedido, items: [] });
+      grupos.get(id).items.push(item);
+    }
+    return [...grupos.values()].sort((a, b) => new Date(a.items[0].created_at) - new Date(b.items[0].created_at));
+  }, [items]);
+
   const cobros = useMemo(() => {
     const deVerificar = pagosPendientes.map((p) => ({ ...p, _tipo: 'verificar' }));
     const deCobrar = porCobrar.map((p) => ({ ...p, _tipo: 'cobrar' }));
@@ -268,6 +357,16 @@ export default function BarraPage() {
             </span>
           )}
         </button>
+        {todasLasBarras.length > 1 && (
+          <button onClick={() => setTab('traslados')} className={`relative rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'traslados' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
+            Traslados
+            {movPendientes.length > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold-500 text-[10px] font-bold text-ink-950">
+                {movPendientes.length}
+              </span>
+            )}
+          </button>
+        )}
         <button onClick={() => setTab('caja')} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'caja' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           Caja
         </button>
@@ -288,72 +387,76 @@ export default function BarraPage() {
         {tab === 'pedidos' && (
           cargando ? (
             <LoadingScreen label="Cargando pedidos…" />
-          ) : items.length === 0 ? (
+          ) : pedidosAgrupados.length === 0 ? (
             <EmptyState icono={CheckCircle2} titulo="No hay pedidos pendientes por ahora" oscuro />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {items.map((item) => {
-                const entregado = item.estado === 'entregado';
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {pedidosAgrupados.map(({ pedido, items: itemsPedido }) => {
+                const todoEntregado = itemsPedido.every((i) => i.estado === 'entregado');
                 return (
                   <article
-                    key={item.id}
+                    key={pedido.id}
                     className={`rounded-2xl border-2 bg-ink-900 p-4 shadow-lift transition ${
-                      item.estado === 'pendiente' ? 'border-ink-800' : item.estado === 'preparando' ? 'border-gold-500' : entregado ? 'border-petrol-500/60' : 'border-petrol-500'
-                    } ${entregado && 'opacity-80'}`}
+                      todoEntregado ? 'border-petrol-500/60 opacity-80' : 'border-ink-800'
+                    }`}
                   >
                     <div className="mb-3 flex items-start justify-between">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
-                          {item.pedido?.mesa?.nombre || item.pedido?.referencia_mesa || 'Para llevar'}
+                          {pedido.mesa?.nombre || pedido.referencia_mesa || 'Para llevar'}
                         </p>
                         <p className="flex items-center gap-1 text-xs text-mist-500">
-                          {item.pedido?.origen === 'barra' ? (
+                          {pedido.origen === 'barra' ? (
                             <span className="rounded bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gold-400">Barra</span>
                           ) : (
                             <span className="rounded bg-petrol-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-petrol-300">Mesero</span>
                           )}
-                          {item.pedido?.mesero?.nombre}
+                          {pedido.mesero?.nombre}
                         </p>
                       </div>
-                      <span className={`badge border ${COLOR_ESTADO[item.estado]}`}>
-                        {item.estado === 'preparando' && <Flame size={12} />}
-                        {item.estado === 'entregado' && <CheckCircle2 size={12} />}
-                        {item.estado}
-                      </span>
+                      <div className="flex items-center gap-1.5 text-xs text-mist-500">
+                        <Clock size={13} />
+                        {new Date(itemsPedido[0].created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
 
-                    <h3 className="mb-1 font-display text-lg font-bold text-white">
-                      {item.cantidad}× {item.producto?.nombre}
-                    </h3>
-                    {item.observaciones && (
-                      <p className="mb-3 rounded-lg bg-ink-800 px-2.5 py-1.5 text-xs text-gold-400">{item.observaciones}</p>
-                    )}
-
-                    <div className="mb-3 flex items-center gap-1.5 text-xs text-mist-500">
-                      <Clock size={13} />
-                      {new Date(item.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                    <div className="mb-3 space-y-2">
+                      {itemsPedido.map((item) => {
+                        const entregado = item.estado === 'entregado';
+                        return (
+                          <div key={item.id} className={`rounded-xl border p-2.5 ${COLOR_ESTADO[item.estado]} bg-opacity-10`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-bold text-white">{item.cantidad}× {item.producto?.nombre}</p>
+                                {item.observaciones && <p className="mt-0.5 text-xs text-gold-400">{item.observaciones}</p>}
+                              </div>
+                              <span className={`badge shrink-0 border ${COLOR_ESTADO[item.estado]}`}>
+                                {item.estado === 'preparando' && <Flame size={11} />}
+                                {entregado && <CheckCircle2 size={11} />}
+                                {item.estado}
+                              </span>
+                            </div>
+                            {!entregado && (
+                              <div className="mt-2 flex gap-1.5">
+                                <button onClick={() => avanzarEstado(item)} className="btn-primary flex-1 !py-1.5 text-xs">
+                                  {ETIQUETA_ACCION[item.estado]}
+                                </button>
+                                <button onClick={() => cancelarItem(item)} className="rounded-lg border border-ink-800 p-1.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label={`Cancelar ${item.producto?.nombre}`}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
 
-                    <div className="flex gap-2">
-                      {!entregado && (
-                        <>
-                          <button onClick={() => avanzarEstado(item)} className="btn-primary flex-1">
-                            {ETIQUETA_ACCION[item.estado]}
-                          </button>
-                          <button onClick={() => cancelarItem(item)} className="rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Cancelar este producto">
-                            <Trash2 size={16} />
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={() => anularPedido(item.pedido.id)}
-                        className={`rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400 ${entregado ? 'flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold' : ''}`}
-                        aria-label="Anular pedido completo"
-                        title="Anular pedido completo"
-                      >
-                        <Ban size={entregado ? 15 : 16} /> {entregado && 'Anular pedido completo'}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => anularPedido(pedido.id)}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-ink-800 p-2.5 text-sm font-semibold text-mist-400 hover:border-red-500 hover:text-red-400"
+                    >
+                      <Ban size={15} /> Anular pedido completo
+                    </button>
                   </article>
                 );
               })}
@@ -398,6 +501,61 @@ export default function BarraPage() {
               ))}
             </div>
           )
+        )}
+
+        {tab === 'traslados' && (
+          <div className="space-y-6">
+            <button
+              onClick={() => setModalNuevoTraslado(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-gold-500 px-3.5 py-2 text-xs font-bold text-ink-950"
+            >
+              <ArrowLeftRight size={14} /> Enviar inventario a otra barra
+            </button>
+
+            <div>
+              <h2 className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-white">
+                Por aceptar
+                {movPendientes.length > 0 && <span className="badge bg-gold-500/20 text-gold-400">{movPendientes.length}</span>}
+              </h2>
+              {movPendientes.length === 0 ? (
+                <p className="text-sm text-mist-500">No tienes traslados esperando tu confirmación.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {movPendientes.map((mov) => (
+                    <article key={mov.id} className="rounded-2xl border-2 border-gold-500 bg-ink-900 p-4 shadow-lift">
+                      <p className="text-xs text-mist-500">De <span className="font-semibold text-white">{mov.barra_origen?.nombre}</span></p>
+                      <p className="my-1 font-display text-lg font-bold text-white">{mov.cantidad} {mov.insumo?.unidad} de {mov.insumo?.nombre}</p>
+                      {mov.nota && <p className="mb-2 text-xs text-mist-400">"{mov.nota}"</p>}
+                      <p className="mb-3 text-xs text-mist-500">Enviado por {mov.solicitante?.nombre}</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => aceptarTraslado(mov)} className="btn-gold flex-1 !py-2 text-sm"><Check size={15} /> Aceptar</button>
+                        <button onClick={() => rechazarTraslado(mov)} className="rounded-xl border border-ink-800 p-2 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Rechazar traslado">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h2 className="mb-3 font-display text-sm font-bold text-white">Enviados, esperando confirmación</h2>
+              {movEnviados.length === 0 ? (
+                <p className="text-sm text-mist-500">No tienes traslados propios esperando que la otra barra los acepte.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {movEnviados.map((mov) => (
+                    <article key={mov.id} className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+                      <p className="text-xs text-mist-500">Para <span className="font-semibold text-white">{mov.barra_destino?.nombre}</span></p>
+                      <p className="my-1 font-display text-base font-bold text-white">{mov.cantidad} {mov.insumo?.unidad} de {mov.insumo?.nombre}</p>
+                      <span className="badge bg-mist-500/20 text-mist-300">Esperando que lo acepten</span>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {tab === 'caja' && (
@@ -485,6 +643,68 @@ export default function BarraPage() {
               <input required type="number" min="0" className="input" value={montoFinal} onChange={(e) => setMontoFinal(e.target.value)} />
             </div>
             <button type="submit" className="btn-danger w-full">Cerrar caja</button>
+          </form>
+        </Modal>
+      )}
+
+      {modalNuevoTraslado && (
+        <Modal title="Enviar inventario a otra barra" onClose={() => setModalNuevoTraslado(false)}>
+          <form onSubmit={enviarTraslado} className="space-y-3">
+            <div>
+              <label className="label" htmlFor="traslado-insumo">Insumo</label>
+              <select
+                id="traslado-insumo"
+                required
+                className="select"
+                value={formTraslado.insumo_id}
+                onChange={(e) => setFormTraslado({ ...formTraslado, insumo_id: e.target.value })}
+              >
+                <option value="">Selecciona un insumo</option>
+                {insumos.filter((i) => i.activo).map((i) => (
+                  <option key={i.id} value={i.id}>{i.nombre}</option>
+                ))}
+              </select>
+              {insumoSeleccionado && (
+                <p className="mt-1 text-xs text-mist-500">Tienes {stockDisponibleEnviar} {insumoSeleccionado.unidad} en tu barra.</p>
+              )}
+            </div>
+            <div>
+              <label className="label" htmlFor="traslado-destino">Enviar a</label>
+              <select
+                id="traslado-destino"
+                required
+                className="select"
+                value={formTraslado.barra_destino_id}
+                onChange={(e) => setFormTraslado({ ...formTraslado, barra_destino_id: e.target.value })}
+              >
+                <option value="">Selecciona la barra destino</option>
+                {todasLasBarras.filter((b) => b.id !== barraId).map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="traslado-cantidad">Cantidad a enviar</label>
+              <input
+                id="traslado-cantidad"
+                required
+                type="number"
+                min="0"
+                max={stockDisponibleEnviar || undefined}
+                step="any"
+                className="input"
+                value={formTraslado.cantidad}
+                onChange={(e) => setFormTraslado({ ...formTraslado, cantidad: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="traslado-nota">Nota (opcional)</label>
+              <input id="traslado-nota" className="input" placeholder="Ej. se acabó en Cantina" value={formTraslado.nota} onChange={(e) => setFormTraslado({ ...formTraslado, nota: e.target.value })} />
+            </div>
+            <p className="rounded-xl bg-mist-50 px-3 py-2.5 text-xs text-mist-600">
+              Se descuenta de tu inventario apenas envías. La otra barra tiene que aceptarlo para que aparezca en el suyo.
+            </p>
+            <button type="submit" disabled={enviandoTraslado} className="btn-primary w-full">
+              {enviandoTraslado ? 'Enviando…' : 'Enviar traslado'}
+            </button>
           </form>
         </Modal>
       )}

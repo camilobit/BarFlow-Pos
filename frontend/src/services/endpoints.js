@@ -45,6 +45,15 @@ export const productosApi = {
   establecerStockBarra: (id, payload) => api.post(`/productos/insumos/${id}/establecer-stock`, payload).then((r) => r.data),
 };
 
+export const movimientosApi = {
+  crear: (payload) => api.post('/productos/movimientos', payload).then((r) => r.data),
+  pendientes: (barraId) => api.get('/productos/movimientos/pendientes', { params: { barra_id: barraId } }).then((r) => r.data),
+  enviados: (barraId) => api.get('/productos/movimientos/enviados', { params: { barra_id: barraId } }).then((r) => r.data),
+  aceptar: (id) => api.patch(`/productos/movimientos/${id}/aceptar`).then((r) => r.data),
+  rechazar: (id) => api.patch(`/productos/movimientos/${id}/rechazar`).then((r) => r.data),
+  historial: (params) => api.get('/productos/movimientos/historial', { params }).then((r) => r.data),
+};
+
 export const cajaApi = {
   actual: (barraId) => api.get('/caja/actual', { params: { barra_id: barraId } }).then((r) => r.data),
   abiertas: () => api.get('/caja/abiertas').then((r) => r.data),
