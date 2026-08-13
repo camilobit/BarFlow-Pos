@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, Send, Receipt, ShoppingCart, X, Search, PackageSearch } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { pedidosApi, productosApi, barrasApi } from '../../services/endpoints.js';
@@ -27,15 +27,22 @@ function barraMasFrecuente(pedido) {
 export default function MeseroPedidoDetalle() {
   const { pedidoId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { perfil } = useAuth();
   const esNuevo = pedidoId === 'nuevo';
   // La barra reutiliza esta misma pantalla ("exactamente el mismo
   // proceso que hace un mesero") — solo cambia a dónde vuelve al salir.
   const rutaVolver = perfil?.rol === 'barra' ? '/barra' : '/mesero';
+  const esBarra = perfil?.rol === 'barra';
 
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [barras, setBarras] = useState([]);
+  // A qué barra se envía el pedido. Si quien crea el pedido ES la barra
+  // (pedido nativo), ya se sabe cuál es — viene de la pantalla de Barra.
+  // Si es un mesero, tiene que elegirla (salvo que el negocio solo tenga
+  // una barra, ahí no hay nada que preguntar).
+  const [barraDestino, setBarraDestino] = useState(esBarra ? (location.state?.barraId || perfil?.barra_id || '') : '');
   const [categoriaActiva, setCategoriaActiva] = useState(null);
   const [busqueda, setBusqueda] = useState('');
   const [pedido, setPedido] = useState(null);
@@ -55,6 +62,9 @@ export default function MeseroPedidoDetalle() {
     setCategorias(cats);
     setBarras(brs);
     if (cats.length) setCategoriaActiva((prev) => prev || cats[0].id);
+    // Si el negocio solo tiene una barra, no hay nada que preguntar —
+    // se envía sola, sin fricción extra para el mesero.
+    if (!esBarra && brs.length === 1) setBarraDestino((prev) => prev || brs[0].id);
 
     if (!esNuevo) {
       const data = await pedidosApi.obtener(pedidoId);
@@ -95,14 +105,17 @@ export default function MeseroPedidoDetalle() {
 
   async function enviarPedido() {
     if (carrito.length === 0) return;
+    if (!esBarra && barras.length > 1 && !barraDestino) {
+      return toast.error('Elige a qué barra envías el pedido antes de enviarlo.');
+    }
     setEnviando(true);
     try {
       const items = carrito.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad, observaciones: i.observaciones || undefined }));
       let actualizado;
       if (pedido) {
-        actualizado = await pedidosApi.agregarItems(pedido.id, items);
+        actualizado = await pedidosApi.agregarItems(pedido.id, items, barraDestino || undefined);
       } else {
-        actualizado = await pedidosApi.crear({ referencia_mesa: referencia || null, items });
+        actualizado = await pedidosApi.crear({ referencia_mesa: referencia || null, items, barra_destino_id: barraDestino || undefined });
         // Actualiza la URL a /mesero/pedido/<id-real> sin recargar la página
         window.history.replaceState(null, '', `/mesero/pedido/${actualizado.id}`);
       }
@@ -250,6 +263,23 @@ export default function MeseroPedidoDetalle() {
 
       {carrito.length > 0 && (
         <div className="border-t border-mist-200 bg-white px-4 py-3">
+          {!esBarra && barras.length > 1 && (
+            <div className="mb-3">
+              <label className="mb-1.5 block text-xs font-semibold text-mist-500" htmlFor="barra-destino">
+                ¿A qué barra envías este pedido?
+              </label>
+              <select
+                id="barra-destino"
+                required
+                className="select"
+                value={barraDestino}
+                onChange={(e) => setBarraDestino(e.target.value)}
+              >
+                <option value="">Selecciona una barra</option>
+                {barras.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+              </select>
+            </div>
+          )}
           <div className="mb-2 flex max-h-32 flex-col gap-1.5 overflow-y-auto">
             {carrito.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between text-sm">
@@ -274,7 +304,7 @@ export default function MeseroPedidoDetalle() {
               </div>
             ))}
           </div>
-          <button onClick={enviarPedido} disabled={enviando} className="btn-lg btn-primary w-full">
+          <button onClick={enviarPedido} disabled={enviando || (!esBarra && barras.length > 1 && !barraDestino)} className="btn-lg btn-primary w-full">
             <Send size={18} /> {enviando ? 'Enviando…' : `Enviar a barra · ${formatoCOP.format(totalCarrito)}`}
           </button>
         </div>

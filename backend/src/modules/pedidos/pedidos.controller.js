@@ -4,7 +4,7 @@ import { response } from '../../utils/response.utils.js';
 import * as pedidosService from './pedidos.service.js';
 
 export const crear = asyncHandler(async (req, res) => {
-  const { mesa_id, referencia_mesa, cliente_id, observaciones, items } = req.body;
+  const { mesa_id, referencia_mesa, cliente_id, observaciones, items, barra_destino_id } = req.body;
   // El origen lo decide el backend según quién está autenticado, no el
   // cliente — así nadie puede falsear si el pedido vino de un mesero o
   // se hizo directo en la barra.
@@ -18,6 +18,7 @@ export const crear = asyncHandler(async (req, res) => {
     observaciones,
     items,
     origen,
+    barraDestinoId: barra_destino_id,
   });
   await registrarAuditoria({
     negocioId: req.usuario.negocio_id,
@@ -51,8 +52,13 @@ export const obtener = asyncHandler(async (req, res) => {
 });
 
 export const agregarItems = asyncHandler(async (req, res) => {
-  const pedido = await pedidosService.agregarItems(req.params.id, req.body.items);
+  const pedido = await pedidosService.agregarItems(req.params.id, req.body.items, req.body.barra_destino_id);
   return response.success(res, pedido, 'Productos agregados al pedido');
+});
+
+export const anular = asyncHandler(async (req, res) => {
+  await pedidosService.anularPedido(req.params.id);
+  return response.success(res, null, 'Pedido anulado');
 });
 
 export const quitarItem = asyncHandler(async (req, res) => {

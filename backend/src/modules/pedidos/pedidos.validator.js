@@ -5,6 +5,7 @@ export const crearPedidoSchema = z.object({
   referencia_mesa: z.string().max(80).nullable().optional(),
   cliente_id: z.string().uuid().nullable().optional(),
   observaciones: z.string().max(500).optional(),
+  barra_destino_id: z.string().uuid().optional(),
   items: z
     .array(
       z.object({
@@ -17,6 +18,7 @@ export const crearPedidoSchema = z.object({
 });
 
 export const agregarItemsSchema = z.object({
+  barra_destino_id: z.string().uuid().optional(),
   items: z
     .array(
       z.object({

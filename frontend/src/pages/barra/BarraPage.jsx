@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound,
-  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt,
+  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt, Ban,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -23,6 +23,7 @@ const COLOR_ESTADO = {
   pendiente: 'bg-mist-100 text-mist-500 border-mist-200',
   preparando: 'bg-gold-200 text-gold-600 border-gold-400',
   listo: 'bg-petrol-100 text-petrol-600 border-petrol-300',
+  entregado: 'bg-petrol-500/20 text-petrol-300 border-petrol-500',
 };
 
 export default function BarraPage() {
@@ -36,7 +37,7 @@ export default function BarraPage() {
   const [caja, setCaja] = useState(undefined);
   const [estadisticas, setEstadisticas] = useState(null);
   const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
-  const [tab, setTab] = useState('pedidos'); // pedidos | pagos | porcobrar | caja | estadisticas
+  const [tab, setTab] = useState('pedidos'); // pedidos | cobros | caja | estadisticas
   const [cargando, setCargando] = useState(true);
   const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
@@ -90,7 +91,6 @@ export default function BarraPage() {
       setEstadisticas(await barrasApi.estadisticas(barraId));
     } catch (err) {
       toast.error(err.message || 'No se pudieron cargar las estadísticas.');
-      // Igual mostramos la pantalla vacía en vez de dejar el spinner infinito
       setEstadisticas({
         pedidosDesdeMesero: 0,
         pedidosDesdeBarra: 0,
@@ -115,7 +115,7 @@ export default function BarraPage() {
   useRealtimeTable({ table: 'pedido_items', filter: barraId ? `barra_id=eq.${barraId}` : undefined, onChange: cargarItems, enabled: !!barraId });
   useRealtimeTable({
     table: 'pedidos',
-    onChange: () => { cargarPagosPendientes(); cargarPorCobrar(); if (tab === 'estadisticas') cargarEstadisticas(); },
+    onChange: () => { cargarItems(); cargarPagosPendientes(); cargarPorCobrar(); if (tab === 'estadisticas') cargarEstadisticas(); },
     enabled: !!barraId,
   });
 
@@ -130,9 +130,8 @@ export default function BarraPage() {
     }
   }
 
-  // Para pedidos muertos, duplicados por error, o que el cliente canceló
-  // antes de que se despachara — solo funciona mientras no esté entregado
-  // (el backend también lo protege, esto es la confirmación al usuario).
+  // Quitar SOLO este producto — nada más funciona antes de entregarse
+  // (el backend también lo protege).
   async function cancelarItem(item) {
     const ok = await confirmar({
       titulo: 'Cancelar producto',
@@ -145,6 +144,27 @@ export default function BarraPage() {
       await pedidosApi.quitarItem(item.pedido.id, item.id);
       toast.success('Producto eliminado del pedido');
       cargarItems();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  // Anula el PEDIDO COMPLETO — funciona incluso después de despachado
+  // (ej. el cliente devuelve todo el pedido), mientras no se haya
+  // cobrado todavía. Revierte el inventario que ya se hubiera descontado.
+  async function anularPedido(pedidoId) {
+    const ok = await confirmar({
+      titulo: 'Anular pedido completo',
+      mensaje: 'Esto anula TODO el pedido (todos sus productos), y devuelve al inventario lo que ya se hubiera descontado. No se puede deshacer.',
+      textoConfirmar: 'Anular pedido',
+      peligroso: true,
+    });
+    if (!ok) return;
+    try {
+      await pedidosApi.anular(pedidoId);
+      toast.success('Pedido anulado');
+      cargarItems();
+      cargarPorCobrar();
     } catch (err) {
       toast.error(err.message);
     }
@@ -186,7 +206,15 @@ export default function BarraPage() {
     }
   }
 
-  const visibles = items.filter((i) => i.estado !== 'entregado');
+  // "Cobros" unifica dos cosas que antes eran pestañas separadas y se
+  // sentían redundantes: pedidos de mesero pagados y sin verificar, y
+  // pedidos nativos de barra ya servidos pero aún no cobrados.
+  const cobros = useMemo(() => {
+    const deVerificar = pagosPendientes.map((p) => ({ ...p, _tipo: 'verificar' }));
+    const deCobrar = porCobrar.map((p) => ({ ...p, _tipo: 'cobrar' }));
+    return [...deVerificar, ...deCobrar].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }, [pagosPendientes, porCobrar]);
+
   const nombreBarra = barras.find((b) => b.id === barraId)?.nombre;
 
   return (
@@ -232,19 +260,11 @@ export default function BarraPage() {
         <button onClick={() => setTab('pedidos')} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'pedidos' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           Pedidos
         </button>
-        <button onClick={() => setTab('pagos')} className={`relative rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'pagos' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
-          Pagos por verificar
-          {pagosPendientes.length > 0 && (
+        <button onClick={() => setTab('cobros')} className={`relative rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'cobros' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
+          Cobros
+          {cobros.length > 0 && (
             <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold-500 text-[10px] font-bold text-ink-950">
-              {pagosPendientes.length}
-            </span>
-          )}
-        </button>
-        <button onClick={() => setTab('porcobrar')} className={`relative rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'porcobrar' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
-          Por cobrar
-          {porCobrar.length > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gold-500 text-[10px] font-bold text-ink-950">
-              {porCobrar.length}
+              {cobros.length}
             </span>
           )}
         </button>
@@ -257,7 +277,7 @@ export default function BarraPage() {
 
         {/* Un cliente llega directo a la barra, sin mesero de por medio */}
         <button
-          onClick={() => navigate('/mesero/pedido/nuevo')}
+          onClick={() => navigate('/mesero/pedido/nuevo', { state: { barraId } })}
           className="ml-auto flex items-center gap-1.5 rounded-lg bg-gold-500 px-3.5 py-1.5 text-xs font-bold text-ink-950"
         >
           <Plus size={14} /> Crear pedido
@@ -268,107 +288,112 @@ export default function BarraPage() {
         {tab === 'pedidos' && (
           cargando ? (
             <LoadingScreen label="Cargando pedidos…" />
-          ) : visibles.length === 0 ? (
-<EmptyState icono={CheckCircle2} titulo="No hay pedidos pendientes por ahora" oscuro />
+          ) : items.length === 0 ? (
+            <EmptyState icono={CheckCircle2} titulo="No hay pedidos pendientes por ahora" oscuro />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visibles.map((item) => (
-                <article
-                  key={item.id}
-                  className={`rounded-2xl border-2 bg-ink-900 p-4 shadow-lift transition ${
-                    item.estado === 'pendiente' ? 'border-ink-800' : item.estado === 'preparando' ? 'border-gold-500' : 'border-petrol-500'
-                  }`}
-                >
-                  <div className="mb-3 flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
-                        {item.pedido?.mesa?.nombre || item.pedido?.referencia_mesa || 'Para llevar'}
-                      </p>
-                      <p className="flex items-center gap-1 text-xs text-mist-500">
-                        {item.pedido?.origen === 'barra' ? (
-                          <span className="rounded bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gold-400">Barra</span>
-                        ) : (
-                          <span className="rounded bg-petrol-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-petrol-300">Mesero</span>
-                        )}
-                        {item.pedido?.mesero?.nombre}
-                      </p>
+              {items.map((item) => {
+                const entregado = item.estado === 'entregado';
+                return (
+                  <article
+                    key={item.id}
+                    className={`rounded-2xl border-2 bg-ink-900 p-4 shadow-lift transition ${
+                      item.estado === 'pendiente' ? 'border-ink-800' : item.estado === 'preparando' ? 'border-gold-500' : entregado ? 'border-petrol-500/60' : 'border-petrol-500'
+                    } ${entregado && 'opacity-80'}`}
+                  >
+                    <div className="mb-3 flex items-start justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
+                          {item.pedido?.mesa?.nombre || item.pedido?.referencia_mesa || 'Para llevar'}
+                        </p>
+                        <p className="flex items-center gap-1 text-xs text-mist-500">
+                          {item.pedido?.origen === 'barra' ? (
+                            <span className="rounded bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gold-400">Barra</span>
+                          ) : (
+                            <span className="rounded bg-petrol-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-petrol-300">Mesero</span>
+                          )}
+                          {item.pedido?.mesero?.nombre}
+                        </p>
+                      </div>
+                      <span className={`badge border ${COLOR_ESTADO[item.estado]}`}>
+                        {item.estado === 'preparando' && <Flame size={12} />}
+                        {item.estado === 'entregado' && <CheckCircle2 size={12} />}
+                        {item.estado}
+                      </span>
                     </div>
-                    <span className={`badge border ${COLOR_ESTADO[item.estado]}`}>
-                      {item.estado === 'preparando' && <Flame size={12} />}
-                      {item.estado}
-                    </span>
-                  </div>
 
-                  <h3 className="mb-1 font-display text-lg font-bold text-white">
-                    {item.cantidad}× {item.producto?.nombre}
-                  </h3>
-                  {item.observaciones && (
-                    <p className="mb-3 rounded-lg bg-ink-800 px-2.5 py-1.5 text-xs text-gold-400">{item.observaciones}</p>
-                  )}
+                    <h3 className="mb-1 font-display text-lg font-bold text-white">
+                      {item.cantidad}× {item.producto?.nombre}
+                    </h3>
+                    {item.observaciones && (
+                      <p className="mb-3 rounded-lg bg-ink-800 px-2.5 py-1.5 text-xs text-gold-400">{item.observaciones}</p>
+                    )}
 
-                  <div className="mb-3 flex items-center gap-1.5 text-xs text-mist-500">
-                    <Clock size={13} />
-                    {new Date(item.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
+                    <div className="mb-3 flex items-center gap-1.5 text-xs text-mist-500">
+                      <Clock size={13} />
+                      {new Date(item.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
 
-                  <div className="flex gap-2">
-                    <button onClick={() => avanzarEstado(item)} className="btn-primary flex-1">
-                      {ETIQUETA_ACCION[item.estado]}
-                    </button>
-                    <button onClick={() => cancelarItem(item)} className="rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Cancelar producto">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div className="flex gap-2">
+                      {!entregado && (
+                        <>
+                          <button onClick={() => avanzarEstado(item)} className="btn-primary flex-1">
+                            {ETIQUETA_ACCION[item.estado]}
+                          </button>
+                          <button onClick={() => cancelarItem(item)} className="rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Cancelar este producto">
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => anularPedido(item.pedido.id)}
+                        className={`rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400 ${entregado ? 'flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold' : ''}`}
+                        aria-label="Anular pedido completo"
+                        title="Anular pedido completo"
+                      >
+                        <Ban size={entregado ? 15 : 16} /> {entregado && 'Anular pedido completo'}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )
         )}
 
-        {tab === 'pagos' && (
-          pagosPendientes.length === 0 ? (
-<EmptyState icono={BadgeCheck} titulo="No hay pagos pendientes por confirmar" oscuro />
+        {tab === 'cobros' && (
+          cobros.length === 0 ? (
+            <EmptyState icono={Receipt} titulo="No hay pedidos pendientes de cobro" oscuro />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pagosPendientes.map((pedido) => (
-                <article key={pedido.id} className="rounded-2xl border-2 border-gold-500 bg-ink-900 p-4 shadow-lift">
+              {cobros.map((pedido) => (
+                <article key={pedido.id} className={`rounded-2xl border-2 bg-ink-900 p-4 shadow-lift ${pedido._tipo === 'verificar' ? 'border-gold-500' : 'border-ink-800'}`}>
+                  <span className={`badge mb-2 ${pedido._tipo === 'verificar' ? 'bg-gold-500/20 text-gold-400' : 'bg-petrol-500/20 text-petrol-300'}`}>
+                    {pedido._tipo === 'verificar' ? 'Verificar pago de mesero' : 'Cobrar directo'}
+                  </span>
                   <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
                     {pedido.mesa?.nombre || pedido.referencia_mesa || 'Para llevar'}
                   </p>
-                  <p className="mb-2 flex items-center gap-1 text-xs text-mist-500">
-                    {pedido.origen === 'barra' ? (
-                      <span className="rounded bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gold-400">Barra</span>
-                    ) : (
-                      <span className="rounded bg-petrol-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-petrol-300">Mesero</span>
-                    )}
-                    {pedido.mesero?.nombre}
+                  {pedido._tipo === 'verificar' && <p className="mb-1 text-xs text-mist-500">{pedido.mesero?.nombre}</p>}
+                  <p className="mb-1 mt-1 font-display text-xl font-bold text-white">
+                    {formatoCOP.format(pedido._tipo === 'verificar' ? pedido.total : pedido.subtotal)}
                   </p>
-                  <p className="mb-1 font-display text-xl font-bold text-white">{formatoCOP.format(pedido.total)}</p>
-                  <p className="mb-3 text-xs capitalize text-gold-400">{pedido.metodo_pago}</p>
-                  <button onClick={() => confirmarPago(pedido)} className="btn-gold w-full">
-                    <BadgeCheck size={16} /> Confirmar recibido
-                  </button>
-                </article>
-              ))}
-            </div>
-          )
-        )}
+                  {pedido._tipo === 'verificar' && <p className="mb-3 text-xs capitalize text-gold-400">{pedido.metodo_pago}</p>}
 
-        {tab === 'porcobrar' && (
-          porCobrar.length === 0 ? (
-            <EmptyState icono={Receipt} titulo="No tienes pedidos de barra pendientes de cobro" oscuro />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {porCobrar.map((pedido) => (
-                <article key={pedido.id} className="rounded-2xl border-2 border-ink-800 bg-ink-900 p-4 shadow-lift">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
-                    {pedido.referencia_mesa || 'Cliente en barra'}
-                  </p>
-                  <p className="mb-2 text-xs text-mist-500">#{pedido.id.slice(0, 8)} · {pedido.items?.length || 0} productos</p>
-                  <p className="mb-3 font-display text-xl font-bold text-white">{formatoCOP.format(pedido.subtotal)}</p>
-                  <button onClick={() => navigate(`/mesero/pedido/${pedido.id}`)} className="btn-gold w-full">
-                    <Receipt size={16} /> Cobrar ahora
-                  </button>
+                  {pedido._tipo === 'verificar' ? (
+                    <button onClick={() => confirmarPago(pedido)} className="btn-gold w-full">
+                      <BadgeCheck size={16} /> Confirmar recibido
+                    </button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => navigate(`/mesero/pedido/${pedido.id}`)} className="btn-gold flex-1">
+                        <Receipt size={16} /> Cobrar ahora
+                      </button>
+                      <button onClick={() => anularPedido(pedido.id)} className="rounded-xl border border-ink-800 p-2.5 text-mist-400 hover:border-red-500 hover:text-red-400" aria-label="Anular pedido completo">
+                        <Ban size={16} />
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
@@ -400,7 +425,7 @@ export default function BarraPage() {
           cargandoEstadisticas && !estadisticas ? (
             <LoadingScreen label="Cargando estadísticas…" />
           ) : !estadisticas ? (
-<EmptyState icono={ClipboardList} titulo="No hay pedidos en este momento" oscuro />
+            <EmptyState icono={ClipboardList} titulo="No hay pedidos en este momento" oscuro />
           ) : (
             <div className="space-y-5">
               {estadisticas.totalPedidos === 0 && (

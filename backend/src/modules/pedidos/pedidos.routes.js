@@ -34,6 +34,7 @@ router.delete('/:id/items/:itemId', requireRole('mesero', 'barra', 'admin_negoci
 router.patch('/:id/mesa', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), ctrl.cambiarMesa);
 router.post('/:id/cerrar-cuenta', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(cerrarCuentaSchema), ctrl.cerrarCuenta);
 router.post('/:id/dividir', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(dividirCuentaSchema), ctrl.dividirCuenta);
+router.post('/:id/anular', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.anular);
 router.patch('/:id/verificar-pago', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.verificarPago);
 
 export default router;

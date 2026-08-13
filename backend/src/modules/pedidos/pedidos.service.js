@@ -13,7 +13,7 @@ const SELECT_PEDIDO_COMPLETO = `
   )
 `;
 
-export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa, clienteId, observaciones, items, origen }) {
+export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa, clienteId, observaciones, items, origen, barraDestinoId }) {
   // 1) Crear el pedido base
   const { data: pedido, error: errorPedido } = await supabaseAdmin
     .from('pedidos')
@@ -44,6 +44,14 @@ export async function crearPedido({ negocioId, meseroId, mesaId, referenciaMesa,
   if (errorItems) {
     await supabaseAdmin.from('pedidos').delete().eq('id', pedido.id);
     throw new AppError('No se pudieron agregar los productos al pedido.', 500, errorItems.message);
+  }
+
+  // 2.1) La barra que el mesero eligió al enviar el pedido rellena SOLO
+  // los productos que no tenían una barra fija asignada en su ficha — un
+  // trago exclusivo de una barra específica sigue respetando esa
+  // asignación aunque el mesero haya elegido otra barra por defecto.
+  if (barraDestinoId) {
+    await supabaseAdmin.from('pedido_items').update({ barra_id: barraDestinoId }).eq('pedido_id', pedido.id).is('barra_id', null);
   }
 
   // 3) Ocupar la mesa si aplica
@@ -103,7 +111,7 @@ export async function listarPedidos({ negocioId, estado, mesaId, meseroId, orige
   return data;
 }
 
-export async function agregarItems(pedidoId, items) {
+export async function agregarItems(pedidoId, items, barraDestinoId) {
   const filas = items.map((it) => ({
     pedido_id: pedidoId,
     producto_id: it.producto_id,
@@ -112,6 +120,10 @@ export async function agregarItems(pedidoId, items) {
   }));
   const { error } = await supabaseAdmin.from('pedido_items').insert(filas);
   if (error) throw new AppError('No se pudieron agregar los productos.', 500, error.message);
+
+  if (barraDestinoId) {
+    await supabaseAdmin.from('pedido_items').update({ barra_id: barraDestinoId }).eq('pedido_id', pedidoId).is('barra_id', null);
+  }
 
   // Si es un pedido nativo de barra, los ítems nuevos (ej. el cliente pidió
   // una ronda más) también se sirven de una vez, igual que los primeros.
@@ -137,6 +149,67 @@ export async function quitarItem(pedidoId, itemId) {
   const { error } = await supabaseAdmin.from('pedido_items').delete().eq('id', itemId).eq('pedido_id', pedidoId);
   if (error) throw new AppError('No se pudo quitar el producto.', 500, error.message);
   return obtenerPedidoPorId(pedidoId);
+}
+
+// Anula el pedido COMPLETO — incluso después de despachado (ej. el
+// cliente devuelve todo antes de pagar). Ya no se puede modificar
+// producto por producto en ese punto, pero sí se puede anular entero.
+// Cualquier ítem que ya haya descontado inventario (preparando/listo/
+// entregado) se devuelve a la barra correspondiente, para que el
+// inventario quede exacto como si nunca se hubiera preparado.
+export async function anularPedido(pedidoId) {
+  const { data: pedido, error: errorPedido } = await supabaseAdmin
+    .from('pedidos')
+    .select('id, estado')
+    .eq('id', pedidoId)
+    .single();
+  if (errorPedido || !pedido) throw new AppError('Pedido no encontrado.', 404);
+  if (['pagado', 'cancelado'].includes(pedido.estado)) {
+    throw new AppError('Este pedido ya fue cobrado o ya está cancelado — no se puede anular desde aquí.', 409);
+  }
+
+  const { data: items } = await supabaseAdmin
+    .from('pedido_items')
+    .select('id, producto_id, cantidad, barra_id, estado')
+    .eq('pedido_id', pedidoId);
+
+  for (const item of items || []) {
+    // Si nunca pasó por "preparando", nunca se descontó inventario —
+    // nada que devolver.
+    if (!['preparando', 'listo', 'entregado'].includes(item.estado) || !item.barra_id) continue;
+
+    const { data: receta } = await supabaseAdmin
+      .from('producto_insumos')
+      .select('insumo_id, cantidad')
+      .eq('producto_id', item.producto_id);
+
+    for (const ingrediente of receta || []) {
+      const cantidadADevolver = Number(ingrediente.cantidad) * Number(item.cantidad);
+      const { data: stockActual } = await supabaseAdmin
+        .from('insumo_stock_barra')
+        .select('id, stock')
+        .eq('insumo_id', ingrediente.insumo_id)
+        .eq('barra_id', item.barra_id)
+        .maybeSingle();
+      if (stockActual) {
+        await supabaseAdmin
+          .from('insumo_stock_barra')
+          .update({ stock: Number(stockActual.stock) + cantidadADevolver })
+          .eq('id', stockActual.id);
+      }
+    }
+  }
+
+  await supabaseAdmin.from('pedido_items').update({ estado: 'cancelado' }).eq('pedido_id', pedidoId);
+  await supabaseAdmin.from('pedidos').update({ estado: 'cancelado' }).eq('id', pedidoId);
+
+  // Libera la mesa si el pedido estaba asociado a una
+  const { data: pedidoConMesa } = await supabaseAdmin.from('pedidos').select('mesa_id').eq('id', pedidoId).single();
+  if (pedidoConMesa?.mesa_id) {
+    await supabaseAdmin.from('mesas').update({ estado: 'libre' }).eq('id', pedidoConMesa.mesa_id);
+  }
+
+  return { ok: true };
 }
 
 export async function actualizarEstadoItem(itemId, estado) {
@@ -313,6 +386,11 @@ export async function historialPorMesa(mesaId) {
   return data;
 }
 
+// Trae los pedidos "vivos" de una barra: por preparar (pendiente/
+// preparando/listo) Y también los ya entregados que todavía no se han
+// cobrado (para poder anular el pedido completo si el cliente lo
+// devuelve justo después de servirlo, antes de que el mesero cobre).
+// Desaparecen de aquí solo cuando el pedido queda pagado o cancelado.
 export async function pedidosPorBarra(negocioId, barraId) {
   const { data, error } = await supabaseAdmin
     .from('pedido_items')
@@ -323,7 +401,8 @@ export async function pedidosPorBarra(negocioId, barraId) {
     `)
     .eq('barra_id', barraId)
     .eq('pedido.negocio_id', negocioId)
-    .in('estado', ['pendiente', 'preparando', 'listo'])
+    .not('pedido.estado', 'in', '(pagado,cancelado)')
+    .in('estado', ['pendiente', 'preparando', 'listo', 'entregado'])
     .order('created_at', { ascending: true });
 
   if (error) throw new AppError('No se pudieron obtener los pedidos de la barra.', 500, error.message);
