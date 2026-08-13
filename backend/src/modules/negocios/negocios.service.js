@@ -101,3 +101,45 @@ export async function estadisticasGlobales() {
     ingresosPorNegocio,
   };
 }
+
+// Limpia todos los pedidos/caja de prueba de un negocio SIN tocar
+// productos, inventario, categorías, barras ni personal. Pensado para que
+// un dueño que estuvo probando la plataforma pueda arrancar en limpio
+// antes de operar de verdad, sin tener que recrear su catálogo.
+export async function limpiarPedidosYCaja(negocioId, { reiniciarClientes = false } = {}) {
+  const { count: countMovimientos, error: e1 } = await supabaseAdmin
+    .from('movimientos_caja')
+    .delete({ count: 'exact' })
+    .eq('negocio_id', negocioId);
+  if (e1) throw new AppError('No se pudieron borrar los movimientos de caja.', 500, e1.message);
+
+  const { count: countCajas, error: e2 } = await supabaseAdmin
+    .from('cajas')
+    .delete({ count: 'exact' })
+    .eq('negocio_id', negocioId);
+  if (e2) throw new AppError('No se pudieron borrar las cajas.', 500, e2.message);
+
+  // Al borrar pedidos, pedido_items se borra solo (ON DELETE CASCADE)
+  const { count: countPedidos, error: e3 } = await supabaseAdmin
+    .from('pedidos')
+    .delete({ count: 'exact' })
+    .eq('negocio_id', negocioId);
+  if (e3) throw new AppError('No se pudieron borrar los pedidos.', 500, e3.message);
+
+  await supabaseAdmin.from('mesas').update({ estado: 'libre' }).eq('negocio_id', negocioId);
+  await supabaseAdmin.from('notificaciones').delete().eq('negocio_id', negocioId);
+
+  if (reiniciarClientes) {
+    await supabaseAdmin
+      .from('clientes')
+      .update({ visitas: 0, consumo_total: 0, puntos: 0, ultima_visita: null })
+      .eq('negocio_id', negocioId);
+  }
+
+  return {
+    pedidosBorrados: countPedidos || 0,
+    cajasBorradas: countCajas || 0,
+    movimientosBorrados: countMovimientos || 0,
+    clientesReiniciados: reiniciarClientes,
+  };
+}

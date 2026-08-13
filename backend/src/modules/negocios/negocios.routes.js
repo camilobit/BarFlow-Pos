@@ -12,6 +12,10 @@ router.use(requireAuth);
 router.get('/configuracion', ctrl.miConfiguracion);
 router.patch('/configuracion', requireRole('admin_negocio', 'super_admin'), ctrl.actualizarMiConfiguracion);
 
+// Limpiar pedidos/caja de prueba del propio negocio — solo el admin de
+// ese negocio (siempre sobre su propio negocio_id, nunca otro).
+router.post('/limpiar-pedidos', requireRole('admin_negocio', 'super_admin'), ctrl.limpiarPedidosYCaja);
+
 // Administración de negocios: exclusivo de super_admin
 router.get('/', requireRole('super_admin'), ctrl.listar);
 router.get('/estadisticas', requireRole('super_admin'), ctrl.estadisticas);

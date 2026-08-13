@@ -76,3 +76,10 @@ export const actualizarMiConfiguracion = asyncHandler(async (req, res) => {
   const configuracion = await negociosService.actualizarConfiguracion(req.usuario.negocio_id, req.body);
   return response.success(res, configuracion, 'Configuración actualizada');
 });
+
+export const limpiarPedidosYCaja = asyncHandler(async (req, res) => {
+  const resultado = await negociosService.limpiarPedidosYCaja(req.usuario.negocio_id, {
+    reiniciarClientes: !!req.body.reiniciar_clientes,
+  });
+  return response.success(res, resultado, 'Pedidos y caja limpiados correctamente');
+});

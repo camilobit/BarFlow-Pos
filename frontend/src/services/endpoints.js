@@ -99,6 +99,7 @@ export const negociosApi = {
   estadisticas: () => api.get('/negocios/estadisticas').then((r) => r.data),
   miConfiguracion: () => api.get('/negocios/configuracion').then((r) => r.data),
   actualizarMiConfiguracion: (payload) => api.patch('/negocios/configuracion', payload).then((r) => r.data),
+  limpiarPedidos: (reiniciarClientes) => api.post('/negocios/limpiar-pedidos', { reiniciar_clientes: reiniciarClientes }).then((r) => r.data),
 };
 
 export const barrasApi = {
