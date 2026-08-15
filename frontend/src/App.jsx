@@ -15,6 +15,7 @@ import AdminBarrasPage from './pages/admin/AdminBarrasPage.jsx';
 import AdminProductosPage from './pages/admin/AdminProductosPage.jsx';
 import AdminInventarioPage from './pages/admin/AdminInventarioPage.jsx';
 import AdminCajaPage from './pages/admin/AdminCajaPage.jsx';
+import AdminPedidosPage from './pages/admin/AdminPedidosPage.jsx';
 import AdminClientesPage from './pages/admin/AdminClientesPage.jsx';
 import AdminEquipoPage from './pages/admin/AdminEquipoPage.jsx';
 import AdminNegociosPage from './pages/admin/AdminNegociosPage.jsx';
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="productos" element={<SoloAdminNegocio><AdminProductosPage /></SoloAdminNegocio>} />
         <Route path="inventario" element={<SoloAdminNegocio><AdminInventarioPage /></SoloAdminNegocio>} />
         <Route path="caja" element={<SoloAdminNegocio><AdminCajaPage /></SoloAdminNegocio>} />
+        <Route path="pedidos" element={<SoloAdminNegocio><AdminPedidosPage /></SoloAdminNegocio>} />
         <Route path="clientes" element={<SoloAdminNegocio><AdminClientesPage /></SoloAdminNegocio>} />
         <Route path="equipo" element={<SoloAdminNegocio><AdminEquipoPage /></SoloAdminNegocio>} />
         <Route path="negocios" element={<AdminNegociosPage />} />

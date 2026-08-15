@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound,
-  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt, Ban, ArrowLeftRight, Check, X,
+  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt, Ban, ArrowLeftRight, Check, X, History,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -39,7 +39,7 @@ export default function BarraPage() {
   const [caja, setCaja] = useState(undefined);
   const [estadisticas, setEstadisticas] = useState(null);
   const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
-  const [tab, setTab] = useState('pedidos'); // pedidos | cobros | traslados | caja | estadisticas
+  const [tab, setTab] = useState('pedidos'); // pedidos | cobros | traslados | historial | caja | estadisticas
   const [cargando, setCargando] = useState(true);
   const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
@@ -52,6 +52,8 @@ export default function BarraPage() {
   const [movPendientes, setMovPendientes] = useState([]);
   const [movEnviados, setMovEnviados] = useState([]);
   const [formTraslado, setFormTraslado] = useState({ insumo_id: '', barra_destino_id: '', cantidad: '', nota: '' });
+  const [historial, setHistorial] = useState(null);
+  const [filtroFecha, setFiltroFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [enviandoTraslado, setEnviandoTraslado] = useState(false);
 
   const cargarBarras = useCallback(async () => {
@@ -121,6 +123,16 @@ export default function BarraPage() {
     setInsumos(await productosApi.insumos());
   }, []);
 
+  // Pedidos ya cobrados en esta barra, filtrados por fecha — para que el
+  // cajero pueda revisar rápido qué se vendió en su turno sin tener que
+  // interpretar las estadísticas agregadas.
+  const cargarHistorial = useCallback(async () => {
+    if (!barraId) return;
+    const desde = `${filtroFecha}T00:00:00`;
+    const hasta = `${filtroFecha}T23:59:59`;
+    setHistorial(await pedidosApi.listar({ estado: 'pagado', barra_id: barraId, desde, hasta }));
+  }, [barraId, filtroFecha]);
+
   const cargarMovimientos = useCallback(async () => {
     if (!barraId) return;
     const [pendientes, enviados] = await Promise.all([
@@ -135,6 +147,7 @@ export default function BarraPage() {
   useEffect(() => { cargarItems(); cargarPagosPendientes(); cargarCaja(); cargarPorCobrar(); cargarMovimientos(); }, [cargarItems, cargarPagosPendientes, cargarCaja, cargarPorCobrar, cargarMovimientos]);
   useEffect(() => { if (tab === 'estadisticas') cargarEstadisticas(); }, [tab, cargarEstadisticas]);
   useEffect(() => { if (tab === 'traslados' && insumos.length === 0) cargarInsumos(); }, [tab, insumos.length, cargarInsumos]);
+  useEffect(() => { if (tab === 'historial') cargarHistorial(); }, [tab, cargarHistorial]);
 
   useRealtimeTable({ table: 'pedido_items', filter: barraId ? `barra_id=eq.${barraId}` : undefined, onChange: cargarItems, enabled: !!barraId });
   useRealtimeTable({
@@ -374,6 +387,9 @@ export default function BarraPage() {
         <button onClick={() => setTab('caja')} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'caja' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           Caja
         </button>
+        <button onClick={() => setTab('historial')} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'historial' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
+          <History size={13} /> Historial
+        </button>
         <button onClick={() => setTab('estadisticas')} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === 'estadisticas' ? 'bg-petrol-600 text-white' : 'text-mist-400 hover:bg-ink-800'}`}>
           <BarChart3 size={13} /> Estadísticas
         </button>
@@ -587,6 +603,62 @@ export default function BarraPage() {
                 {caja ? `Abierta con ${formatoCOP.format(caja.monto_inicial)} de base.` : 'No hay caja abierta en esta barra todavía.'}
               </p>
             </div>
+          </div>
+        )}
+
+        {tab === 'historial' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <label htmlFor="historial-fecha" className="text-xs font-semibold text-mist-400">Fecha</label>
+              <input
+                id="historial-fecha"
+                type="date"
+                className="input !w-auto bg-ink-900 !text-white [color-scheme:dark]"
+                value={filtroFecha}
+                onChange={(e) => setFiltroFecha(e.target.value)}
+              />
+              {historial && (
+                <span className="text-xs text-mist-500">
+                  {historial.length} pedido(s) · {formatoCOP.format(historial.reduce((sum, p) => sum + Number(p.total), 0))}
+                </span>
+              )}
+            </div>
+
+            {!historial ? (
+              <LoadingScreen label="Cargando historial…" />
+            ) : historial.length === 0 ? (
+              <EmptyState icono={History} titulo="No hay pedidos cobrados en esta fecha" oscuro />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {historial.map((pedido) => (
+                  <article key={pedido.id} className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">
+                        {pedido.mesa?.nombre || pedido.referencia_mesa || 'Para llevar'}
+                      </p>
+                      <span className="flex items-center gap-1 text-xs text-mist-500">
+                        {pedido.origen === 'barra' ? (
+                          <span className="rounded bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gold-400">Barra</span>
+                        ) : (
+                          <span className="rounded bg-petrol-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-petrol-300">Mesero</span>
+                        )}
+                      </span>
+                    </div>
+                    <p className="mb-2 text-xs text-mist-500">{pedido.mesero?.nombre}</p>
+                    <p className="mb-2 font-display text-lg font-bold text-white">{formatoCOP.format(pedido.total)}</p>
+                    <div className="mb-2 space-y-0.5">
+                      {(pedido.items || []).filter((it) => it.barra_id === barraId).map((it) => (
+                        <p key={it.id} className="text-xs text-mist-400">{it.cantidad}× {it.producto?.nombre}</p>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-mist-500">
+                      <span className="capitalize">{pedido.metodo_pago}</span>
+                      <span>{new Date(pedido.cerrado_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

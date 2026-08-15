@@ -352,7 +352,7 @@ export async function cerrarCuenta(pedidoId, { metodoPago, propina, descuento, b
   // vez de dejar que el trigger de la base de datos lo pierda en silencio.
   const { data: pedidoActual, error: errorPedido } = await supabaseAdmin
     .from('pedidos')
-    .select('negocio_id')
+    .select('negocio_id, subtotal')
     .eq('id', pedidoId)
     .single();
   if (errorPedido) throw new AppError('Pedido no encontrado.', 404, errorPedido.message);
@@ -369,9 +369,26 @@ export async function cerrarCuenta(pedidoId, { metodoPago, propina, descuento, b
     throw new AppError('No hay una caja abierta en esa barra. Pide al cajero que la abra antes de cobrar.', 409);
   }
 
+  // IMPORTANTE: el total se recalcula aquí mismo, en el mismo momento en
+  // que se guarda el descuento/propina. Antes, `total` solo se
+  // actualizaba automáticamente cuando cambiaban los PRODUCTOS del
+  // pedido (por un trigger en pedido_items) — pero nada recalculaba el
+  // total cuando el descuento se aplicaba directamente al cerrar la
+  // cuenta, así que el pedido quedaba marcado como pagado con el precio
+  // de lista completo, ignorando el descuento, y ese era el monto que
+  // terminaba registrado en caja.
+  const totalConDescuento = Number(pedidoActual.subtotal) - Number(descuento || 0) + Number(propina || 0);
+
   const { data, error } = await supabaseAdmin
     .from('pedidos')
-    .update({ metodo_pago: metodoPago, propina, descuento, barra_id: barraId || null, estado: 'pagado' })
+    .update({
+      metodo_pago: metodoPago,
+      propina,
+      descuento,
+      total: totalConDescuento,
+      barra_id: barraId || null,
+      estado: 'pagado',
+    })
     .eq('id', pedidoId)
     .select()
     .single();

@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import {
   LayoutDashboard, Grid3x3, Package, Boxes, Wallet, Users, UserCog, Building2,
-  LogOut, Martini, KeyRound, X, MoreHorizontal, User,
+  LogOut, Martini, KeyRound, X, MoreHorizontal, User, Receipt,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import CambiarPasswordModal from '../common/CambiarPasswordModal.jsx';
@@ -17,6 +17,7 @@ const NAV_ADMIN_NEGOCIO = [
   { to: '/admin/productos', label: 'Productos', icon: Package },
   { to: '/admin/inventario', label: 'Inventario', icon: Boxes },
   { to: '/admin/caja', label: 'Caja', icon: Wallet },
+  { to: '/admin/pedidos', label: 'Pedidos', icon: Receipt },
   { to: '/admin/clientes', label: 'Clientes', icon: Users },
   { to: '/admin/equipo', label: 'Equipo', icon: UserCog },
 ];
