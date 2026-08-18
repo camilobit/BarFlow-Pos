@@ -18,6 +18,7 @@ export const pedidosApi = {
   porBarra: (barraId) => api.get(`/pedidos/barra/${barraId}`).then((r) => r.data),
   pagosPorVerificar: (barraId) => api.get('/pedidos/pagos-por-verificar', { params: { barra_id: barraId } }).then((r) => r.data),
   verificarPago: (id) => api.patch(`/pedidos/${id}/verificar-pago`).then((r) => r.data),
+  devolucion: (id, barraId, motivo) => api.post(`/pedidos/${id}/devolucion`, { barra_id: barraId, motivo }).then((r) => r.data),
 };
 
 export const mesasApi = {
@@ -59,7 +60,7 @@ export const cajaApi = {
   actual: (barraId) => api.get('/caja/actual', { params: { barra_id: barraId } }).then((r) => r.data),
   abiertas: () => api.get('/caja/abiertas').then((r) => r.data),
   resumen: (barraId) => api.get('/caja/resumen', { params: { barra_id: barraId } }).then((r) => r.data),
-  historial: () => api.get('/caja/historial').then((r) => r.data),
+  historial: (params) => api.get('/caja/historial', { params }).then((r) => r.data),
   abrir: (barraId, monto_inicial) => api.post('/caja/abrir', { barra_id: barraId, monto_inicial }).then((r) => r.data),
   movimiento: (barraId, payload) => api.post('/caja/movimiento', { ...payload, barra_id: barraId }).then((r) => r.data),
   cerrar: (barraId, monto_final_real) => api.post('/caja/cerrar', { barra_id: barraId, monto_final_real }).then((r) => r.data),

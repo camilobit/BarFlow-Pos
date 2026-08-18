@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Clock, CheckCircle2, Flame, UtensilsCrossed, Wallet, BadgeCheck, Lock, Unlock, KeyRound,
-  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt, Ban, ArrowLeftRight, Check, X, History,
+  Plus, BarChart3, ClipboardList, Timer, TrendingUp, Trash2, Receipt, Ban, ArrowLeftRight, Check, X, History, Undo2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -208,6 +208,31 @@ export default function BarraPage() {
       cargarPorCobrar();
     } catch (err) {
       toast.error(err.message);
+    }
+  }
+
+  // Distinto de "Anular": esto es para cuando el producto YA se entregó,
+  // pero el cliente se fue sin pagar y lo devolvió físicamente (ej. se
+  // fue a otro negocio). Exige escribir un motivo — queda en un reporte
+  // aparte para que el admin pueda revisarlo.
+  const [modalDevolucion, setModalDevolucion] = useState(null); // pedido, o null
+  const [motivoDevolucion, setMotivoDevolucion] = useState('');
+  const [enviandoDevolucion, setEnviandoDevolucion] = useState(false);
+
+  async function confirmarDevolucion(e) {
+    e.preventDefault();
+    setEnviandoDevolucion(true);
+    try {
+      const resultado = await pedidosApi.devolucion(modalDevolucion.id, barraId, motivoDevolucion);
+      toast.success(`${resultado.productosDevueltos} producto(s) devuelto(s) al inventario`);
+      setModalDevolucion(null);
+      setMotivoDevolucion('');
+      cargarItems();
+      cargarPorCobrar();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setEnviandoDevolucion(false);
     }
   }
 
@@ -440,6 +465,10 @@ export default function BarraPage() {
                       </div>
                     </div>
 
+                    {pedido.observaciones && (
+                      <p className="mb-3 rounded-xl bg-ink-800 px-2.5 py-1.5 text-xs text-gold-400">📝 {pedido.observaciones}</p>
+                    )}
+
                     <div className="mb-3 space-y-2">
                       {itemsPedido.map((item) => {
                         const entregado = item.estado === 'entregado';
@@ -467,9 +496,17 @@ export default function BarraPage() {
                     </div>
 
                     {todoEntregado ? (
-                      <p className="rounded-xl bg-ink-800 px-3 py-2.5 text-center text-xs text-mist-400">
-                        Ya entregado — esperando que se cobre
-                      </p>
+                      <div className="space-y-2">
+                        <p className="rounded-xl bg-ink-800 px-3 py-2.5 text-center text-xs text-mist-400">
+                          Ya entregado — esperando que se cobre
+                        </p>
+                        <button
+                          onClick={() => setModalDevolucion(pedido)}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-ink-800 py-2 text-xs font-semibold text-mist-400 hover:border-gold-500 hover:text-gold-400"
+                        >
+                          <Undo2 size={14} /> Registrar devolución (cliente se fue sin pagar)
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex gap-2">
                         <button onClick={() => avanzarGrupo(pedido.id)} className="btn-primary flex-1">
@@ -787,6 +824,32 @@ export default function BarraPage() {
             </p>
             <button type="submit" disabled={enviandoTraslado} className="btn-primary w-full">
               {enviandoTraslado ? 'Enviando…' : 'Enviar traslado'}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {modalDevolucion && (
+        <Modal title="Registrar devolución" onClose={() => setModalDevolucion(null)}>
+          <p className="mb-4 text-sm text-mist-600">
+            Los productos de tu barra en este pedido volverán al inventario, y el pedido queda cancelado (nunca se cobró, así que no pasa por caja).
+          </p>
+          <form onSubmit={confirmarDevolucion} className="space-y-3">
+            <div>
+              <label className="label" htmlFor="motivo-devolucion">Motivo (obligatorio)</label>
+              <textarea
+                id="motivo-devolucion"
+                required
+                minLength={3}
+                rows={3}
+                className="input"
+                placeholder="Ej. el cliente se fue a otro negocio antes de pagar"
+                value={motivoDevolucion}
+                onChange={(e) => setMotivoDevolucion(e.target.value)}
+              />
+            </div>
+            <button type="submit" disabled={enviandoDevolucion} className="btn-danger w-full">
+              {enviandoDevolucion ? 'Registrando…' : 'Registrar devolución'}
             </button>
           </form>
         </Modal>

@@ -58,22 +58,31 @@ export async function resumenCaja(cajaId) {
 
   const totales = movimientos.reduce(
     (acc, m) => {
-      if (m.tipo === 'venta' || m.tipo === 'ingreso') acc.ingresos += Number(m.monto);
+      const esVentaOIngreso = m.tipo === 'venta' || m.tipo === 'ingreso';
+      if (esVentaOIngreso) acc.ingresos += Number(m.monto);
+      if (esVentaOIngreso && (m.metodo_pago === 'efectivo' || !m.metodo_pago)) acc.ingresosEfectivo += Number(m.monto);
       if (m.tipo === 'egreso') acc.egresos += Number(m.monto);
       if (m.tipo === 'propina') acc.propinas += Number(m.monto);
+
+      if (esVentaOIngreso && m.metodo_pago) {
+        acc.porMetodo[m.metodo_pago] = (acc.porMetodo[m.metodo_pago] || 0) + Number(m.monto);
+      }
       return acc;
     },
-    { ingresos: 0, egresos: 0, propinas: 0 }
+    { ingresos: 0, ingresosEfectivo: 0, egresos: 0, propinas: 0, porMetodo: {} }
   );
 
   return { movimientos, totales };
 }
 
+// Solo el EFECTIVO afecta lo que debería haber físicamente en el cajón —
+// las ventas por tarjeta o transferencia nunca fueron billetes que
+// entraron a la caja, así que no se suman al monto esperado al cierre.
 export async function cerrarCaja(cajaId, usuarioId, montoFinalReal) {
   const { totales } = await resumenCaja(cajaId);
   const { data: caja } = await supabaseAdmin.from('cajas').select('monto_inicial').eq('id', cajaId).single();
 
-  const montoFinalCalculado = Number(caja.monto_inicial) + totales.ingresos - totales.egresos;
+  const montoFinalCalculado = Number(caja.monto_inicial) + totales.ingresosEfectivo - totales.egresos;
   const diferencia = montoFinalReal - montoFinalCalculado;
 
   const { data, error } = await supabaseAdmin
@@ -93,8 +102,12 @@ export async function cerrarCaja(cajaId, usuarioId, montoFinalReal) {
   return { caja: data, totales };
 }
 
-export async function historialCajas(negocioId, limite = 30) {
-  const { data, error } = await supabaseAdmin
+// Historial de sesiones de caja (abiertas y cerradas) con el desglose de
+// ingresos totales vs. solo efectivo — para que el admin pueda revisar,
+// por barra y por fecha, cuánto entró de verdad en billete físico frente
+// a la venta total registrada.
+export async function historialCajas(negocioId, { desde, hasta, barraId } = {}, limite = 60) {
+  let query = supabaseAdmin
     .from('cajas')
     .select(
       '*, barra:barras(id, nombre), abierto_por_usuario:usuarios!cajas_abierta_por_fkey(nombre), cerrado_por_usuario:usuarios!cajas_cerrada_por_fkey(nombre)'
@@ -102,6 +115,25 @@ export async function historialCajas(negocioId, limite = 30) {
     .eq('negocio_id', negocioId)
     .order('abierta_at', { ascending: false })
     .limit(limite);
+  if (desde) query = query.gte('abierta_at', desde);
+  if (hasta) query = query.lte('abierta_at', hasta);
+  if (barraId) query = query.eq('barra_id', barraId);
+
+  const { data: cajas, error } = await query;
   if (error) throw new AppError('No se pudo obtener el historial de caja.', 500, error.message);
-  return data;
+  if (!cajas.length) return [];
+
+  const { data: movimientos } = await supabaseAdmin
+    .from('movimientos_caja')
+    .select('caja_id, tipo, monto, metodo_pago')
+    .in('caja_id', cajas.map((c) => c.id));
+
+  return cajas.map((caja) => {
+    const propios = (movimientos || []).filter((m) => m.caja_id === caja.id);
+    const ingresosTotales = propios.filter((m) => m.tipo === 'venta' || m.tipo === 'ingreso').reduce((s, m) => s + Number(m.monto), 0);
+    const ingresosEfectivo = propios
+      .filter((m) => (m.tipo === 'venta' || m.tipo === 'ingreso') && (m.metodo_pago === 'efectivo' || !m.metodo_pago))
+      .reduce((s, m) => s + Number(m.monto), 0);
+    return { ...caja, ingresosTotales, ingresosEfectivo };
+  });
 }

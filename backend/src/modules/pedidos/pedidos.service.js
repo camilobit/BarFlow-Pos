@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../config/supabase.js';
 import { AppError } from '../../utils/AppError.js';
+import { obtenerConfiguracion } from '../negocios/negocios.service.js';
 
 const SELECT_PEDIDO_COMPLETO = `
   *,
@@ -244,6 +245,84 @@ export async function anularPedido(pedidoId, barraId) {
   return { ok: true, productosAnulados: cancelables.length };
 }
 
+// Distinto de "anular": esto es para cuando el producto YA se entregó,
+// pero el cliente se fue sin pagar y lo devolvió físicamente a la barra
+// (ej. decidió irse a otro negocio). A propósito exige un motivo escrito
+// y queda marcado de forma separada en la auditoría — para que el admin
+// pueda revisar devoluciones específicamente, sin que se mezclen con
+// anulaciones comunes de "me equivoqué antes de despachar".
+export async function registrarDevolucion(pedidoId, barraId, motivo) {
+  if (!motivo || !motivo.trim()) {
+    throw new AppError('Escribe el motivo de la devolución antes de registrarla.', 422);
+  }
+
+  const { data: pedido, error: errorPedido } = await supabaseAdmin
+    .from('pedidos')
+    .select('id, estado, mesa_id')
+    .eq('id', pedidoId)
+    .single();
+  if (errorPedido || !pedido) throw new AppError('Pedido no encontrado.', 404);
+  if (['pagado', 'cancelado'].includes(pedido.estado)) {
+    throw new AppError('Este pedido ya fue cobrado o ya está cancelado.', 409);
+  }
+
+  const { data: itemsDeLaBarra } = await supabaseAdmin
+    .from('pedido_items')
+    .select('id, producto_id, cantidad, estado')
+    .eq('pedido_id', pedidoId)
+    .eq('barra_id', barraId)
+    .eq('estado', 'entregado');
+
+  if (!itemsDeLaBarra || itemsDeLaBarra.length === 0) {
+    throw new AppError('Tu barra no tiene productos entregados en este pedido para devolver.', 404);
+  }
+
+  for (const item of itemsDeLaBarra) {
+    const { data: receta } = await supabaseAdmin
+      .from('producto_insumos')
+      .select('insumo_id, cantidad')
+      .eq('producto_id', item.producto_id);
+
+    for (const ingrediente of receta || []) {
+      const cantidadADevolver = Number(ingrediente.cantidad) * Number(item.cantidad);
+      const { data: stockActual } = await supabaseAdmin
+        .from('insumo_stock_barra')
+        .select('id, stock')
+        .eq('insumo_id', ingrediente.insumo_id)
+        .eq('barra_id', barraId)
+        .maybeSingle();
+      if (stockActual) {
+        await supabaseAdmin
+          .from('insumo_stock_barra')
+          .update({ stock: Number(stockActual.stock) + cantidadADevolver })
+          .eq('id', stockActual.id);
+      }
+    }
+  }
+
+  await supabaseAdmin
+    .from('pedido_items')
+    .update({ estado: 'cancelado' })
+    .in('id', itemsDeLaBarra.map((i) => i.id));
+
+  const { data: itemsRestantes } = await supabaseAdmin
+    .from('pedido_items')
+    .select('estado')
+    .eq('pedido_id', pedidoId)
+    .neq('estado', 'cancelado');
+
+  if (!itemsRestantes || itemsRestantes.length === 0) {
+    await supabaseAdmin.from('pedidos').update({ estado: 'cancelado' }).eq('id', pedidoId);
+    if (pedido.mesa_id) {
+      await supabaseAdmin.from('mesas').update({ estado: 'libre' }).eq('id', pedido.mesa_id);
+    }
+  } else {
+    await sincronizarEstadoPedido(pedidoId);
+  }
+
+  return { ok: true, productosDevueltos: itemsDeLaBarra.length };
+}
+
 const ORDEN_ESTADO = { pendiente: 0, preparando: 1, listo: 2, entregado: 3 };
 const SIGUIENTE_ESTADO_ITEM = { pendiente: 'preparando', preparando: 'listo', listo: 'entregado' };
 
@@ -345,11 +424,12 @@ export async function combinarMesas(mesaPrincipalId, mesasSecundariasIds) {
   return { ok: true };
 }
 
-export async function cerrarCuenta(pedidoId, { metodoPago, propina, descuento, barraId }) {
-  // El dinero (o comprobante de Nequi) siempre lo recibe una barra/caja
-  // física concreta — sin caja abierta en esa barra no hay dónde
-  // registrar el cobro, así que lo bloqueamos con un mensaje claro en
-  // vez de dejar que el trigger de la base de datos lo pierda en silencio.
+// pagos: [{ metodo: 'efectivo'|'tarjeta'|'transferencia', monto: number }]
+// El monto de cada línea es lo que cubre de LA CUENTA (subtotal -
+// descuento + propina) — si alguna línea es "tarjeta" y el negocio tiene
+// activado el recargo, ese recargo se SUMA aparte (es plata adicional
+// que paga el cliente, no parte de la cuenta original).
+export async function cerrarCuenta(pedidoId, { pagos, propina, descuento, barraId, nota }) {
   const { data: pedidoActual, error: errorPedido } = await supabaseAdmin
     .from('pedidos')
     .select('negocio_id, subtotal')
@@ -357,6 +437,10 @@ export async function cerrarCuenta(pedidoId, { metodoPago, propina, descuento, b
     .single();
   if (errorPedido) throw new AppError('Pedido no encontrado.', 404, errorPedido.message);
 
+  // El dinero (o comprobante de Nequi) siempre lo recibe una barra/caja
+  // física concreta — sin caja abierta en esa barra no hay dónde
+  // registrar el cobro, así que lo bloqueamos con un mensaje claro en
+  // vez de dejar que se pierda en silencio.
   let cajaQuery = supabaseAdmin
     .from('cajas')
     .select('id')
@@ -369,30 +453,86 @@ export async function cerrarCuenta(pedidoId, { metodoPago, propina, descuento, b
     throw new AppError('No hay una caja abierta en esa barra. Pide al cajero que la abra antes de cobrar.', 409);
   }
 
-  // IMPORTANTE: el total se recalcula aquí mismo, en el mismo momento en
-  // que se guarda el descuento/propina. Antes, `total` solo se
-  // actualizaba automáticamente cuando cambiaban los PRODUCTOS del
-  // pedido (por un trigger en pedido_items) — pero nada recalculaba el
-  // total cuando el descuento se aplicaba directamente al cerrar la
-  // cuenta, así que el pedido quedaba marcado como pagado con el precio
-  // de lista completo, ignorando el descuento, y ese era el monto que
-  // terminaba registrado en caja.
-  const totalConDescuento = Number(pedidoActual.subtotal) - Number(descuento || 0) + Number(propina || 0);
+  if (!pagos || pagos.length === 0) {
+    throw new AppError('Indica al menos un método de pago.', 422);
+  }
+
+  // El total "de la cuenta" (lo que se le cobra al cliente por lo que
+  // consumió) sigue siendo subtotal - descuento + propina, igual que
+  // siempre. Lo que cambia es que ahora puede venir repartido en varias
+  // líneas de pago en vez de un solo método.
+  const totalCuenta = Number(pedidoActual.subtotal) - Number(descuento || 0) + Number(propina || 0);
+  const sumaPagos = pagos.reduce((s, p) => s + Number(p.monto), 0);
+
+  // Margen de 1 peso para evitar falsos rechazos por redondeo de decimales.
+  if (Math.abs(sumaPagos - totalCuenta) > 1) {
+    throw new AppError(`La suma de los pagos (${sumaPagos}) no coincide con el total de la cuenta (${totalCuenta}).`, 422);
+  }
+
+  const config = await obtenerConfiguracion(pedidoActual.negocio_id);
+  const recargoConfig = config.recargo_tarjeta || { activo: false };
+
+  function calcularRecargo(montoTarjeta) {
+    if (!recargoConfig.activo) return 0;
+    if (recargoConfig.tipo === 'porcentaje') return Math.round((Number(montoTarjeta) * Number(recargoConfig.valor)) / 100);
+    return Number(recargoConfig.valor) || 0;
+  }
+
+  const lineasConRecargo = pagos.map((p) => ({
+    metodo: p.metodo,
+    monto_base: Number(p.monto),
+    recargo: p.metodo === 'tarjeta' ? calcularRecargo(p.monto) : 0,
+  }));
+  const totalRecargos = lineasConRecargo.reduce((s, l) => s + l.recargo, 0);
+  const totalFinal = totalCuenta + totalRecargos;
+
+  // metodo_pago (el campo viejo, de un solo valor) se mantiene por
+  // compatibilidad con reportes existentes: si solo hubo un método se
+  // guarda ese, si hubo varios se guarda "mixto".
+  const metodoResumen = pagos.length > 1 ? 'mixto' : pagos[0].metodo;
 
   const { data, error } = await supabaseAdmin
     .from('pedidos')
     .update({
-      metodo_pago: metodoPago,
+      metodo_pago: metodoResumen,
       propina,
       descuento,
-      total: totalConDescuento,
+      total: totalFinal,
       barra_id: barraId || null,
+      observaciones: nota !== undefined ? nota : undefined,
       estado: 'pagado',
     })
     .eq('id', pedidoId)
     .select()
     .single();
   if (error) throw new AppError('No se pudo cerrar la cuenta.', 500, error.message);
+
+  // Guarda el desglose de pagos
+  const filasPagos = lineasConRecargo.map((l) => ({
+    negocio_id: pedidoActual.negocio_id,
+    pedido_id: pedidoId,
+    metodo: l.metodo,
+    monto_base: l.monto_base,
+    recargo: l.recargo,
+  }));
+  const { error: errorPagos } = await supabaseAdmin.from('pedido_pagos').insert(filasPagos);
+  if (errorPagos) throw new AppError('No se pudo guardar el desglose de pagos.', 500, errorPagos.message);
+
+  // Un movimiento de caja POR CADA método usado, ya con el método
+  // correcto marcado — así el cierre de caja puede diferenciar lo que
+  // fue efectivo real de lo que llegó por tarjeta o transferencia.
+  const movimientos = lineasConRecargo.map((l) => ({
+    caja_id: cajaAbierta.id,
+    negocio_id: pedidoActual.negocio_id,
+    tipo: 'venta',
+    monto: l.monto_base + l.recargo,
+    metodo_pago: l.metodo,
+    descripcion: l.recargo > 0 ? `Pago pedido (incluye recargo de ${l.recargo})` : 'Pago pedido',
+    pedido_id: pedidoId,
+    usuario_id: data.mesero_id,
+  }));
+  await supabaseAdmin.from('movimientos_caja').insert(movimientos);
+
   return obtenerPedidoPorId(data.id);
 }
 
@@ -483,7 +623,7 @@ export async function pedidosPorBarra(negocioId, barraId) {
     .select(`
       id, cantidad, observaciones, estado, created_at,
       producto:productos(nombre),
-      pedido:pedidos!inner(id, negocio_id, estado, created_at, origen, mesa:mesas(nombre), mesero:usuarios!pedidos_mesero_id_fkey(nombre))
+      pedido:pedidos!inner(id, negocio_id, estado, created_at, origen, observaciones, mesa:mesas(nombre), mesero:usuarios!pedidos_mesero_id_fkey(nombre))
     `)
     .eq('barra_id', barraId)
     .eq('pedido.negocio_id', negocioId)

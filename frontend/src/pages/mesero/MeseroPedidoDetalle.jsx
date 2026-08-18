@@ -47,6 +47,7 @@ export default function MeseroPedidoDetalle() {
   const [busqueda, setBusqueda] = useState('');
   const [pedido, setPedido] = useState(null);
   const [referencia, setReferencia] = useState('');
+  const [nota, setNota] = useState('');
   const [carrito, setCarrito] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
@@ -70,6 +71,7 @@ export default function MeseroPedidoDetalle() {
       const data = await pedidosApi.obtener(pedidoId);
       setPedido(data);
       setReferencia(data.referencia_mesa || '');
+      setNota(data.observaciones || '');
     }
     setCargando(false);
   }, [pedidoId, esNuevo]);
@@ -115,7 +117,7 @@ export default function MeseroPedidoDetalle() {
       if (pedido) {
         actualizado = await pedidosApi.agregarItems(pedido.id, items, barraDestino || undefined);
       } else {
-        actualizado = await pedidosApi.crear({ referencia_mesa: referencia || null, items, barra_destino_id: barraDestino || undefined });
+        actualizado = await pedidosApi.crear({ referencia_mesa: referencia || null, observaciones: nota || undefined, items, barra_destino_id: barraDestino || undefined });
         // Actualiza la URL a /mesero/pedido/<id-real> sin recargar la página
         window.history.replaceState(null, '', `/mesero/pedido/${actualizado.id}`);
       }
@@ -167,6 +169,15 @@ export default function MeseroPedidoDetalle() {
             placeholder="Referencia (ej. Mesa 5, Terraza, Juan) — opcional"
             value={referencia}
             onChange={(e) => setReferencia(e.target.value)}
+          />
+        )}
+
+        {!pedido && (
+          <input
+            className="input mt-3"
+            placeholder="Nota para la barra (opcional) — ej. cliente frecuente, prisa…"
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
           />
         )}
 

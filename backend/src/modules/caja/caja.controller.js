@@ -38,6 +38,7 @@ export const cerrar = asyncHandler(async (req, res) => {
 });
 
 export const historial = asyncHandler(async (req, res) => {
-  const historial = await cajaService.historialCajas(req.usuario.negocio_id);
+  const { desde, hasta, barra_id } = req.query;
+  const historial = await cajaService.historialCajas(req.usuario.negocio_id, { desde, hasta, barraId: barra_id });
   return response.success(res, historial);
 });

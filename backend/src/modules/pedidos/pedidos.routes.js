@@ -8,6 +8,7 @@ import {
   actualizarEstadoItemSchema,
   cerrarCuentaSchema,
   dividirCuentaSchema,
+  devolucionSchema,
 } from './pedidos.validator.js';
 
 const router = Router();
@@ -35,6 +36,7 @@ router.patch('/:id/mesa', requireRole('mesero', 'barra', 'admin_negocio', 'super
 router.post('/:id/cerrar-cuenta', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(cerrarCuentaSchema), ctrl.cerrarCuenta);
 router.post('/:id/dividir', requireRole('mesero', 'barra', 'admin_negocio', 'super_admin'), validate(dividirCuentaSchema), ctrl.dividirCuenta);
 router.post('/:id/anular', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.anular);
+router.post('/:id/devolucion', requireRole('barra', 'admin_negocio', 'super_admin'), validate(devolucionSchema), ctrl.registrarDevolucion);
 router.patch('/:id/avanzar-por-barra', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.avanzarEstadoPorBarra);
 router.patch('/:id/verificar-pago', requireRole('barra', 'admin_negocio', 'super_admin'), ctrl.verificarPago);
 

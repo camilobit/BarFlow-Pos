@@ -35,10 +35,23 @@ export const actualizarEstadoItemSchema = z.object({
 });
 
 export const cerrarCuentaSchema = z.object({
-  metodo_pago: z.enum(['efectivo', 'tarjeta', 'transferencia', 'mixto']),
+  pagos: z
+    .array(
+      z.object({
+        metodo: z.enum(['efectivo', 'tarjeta', 'transferencia']),
+        monto: z.number().positive(),
+      })
+    )
+    .min(1, 'Indica al menos un método de pago'),
   propina: z.number().min(0).default(0),
   descuento: z.number().min(0).default(0),
   barra_id: z.string().uuid().nullable().optional(),
+  nota: z.string().max(500).optional(),
+});
+
+export const devolucionSchema = z.object({
+  barra_id: z.string().uuid(),
+  motivo: z.string().min(3, 'Escribe el motivo de la devolución').max(500),
 });
 
 export const dividirCuentaSchema = z.object({

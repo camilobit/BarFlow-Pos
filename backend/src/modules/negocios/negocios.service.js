@@ -49,7 +49,13 @@ export async function eliminarNegocio(negocioId) {
   return { ok: true };
 }
 
-const CONFIGURACION_POR_DEFECTO = { modo_mesas: 'libre' };
+const CONFIGURACION_POR_DEFECTO = {
+  modo_mesas: 'libre',
+  // Muchos negocios trasladan al cliente el costo que les cobra el
+  // datáfono por pagos con tarjeta. Apagado por defecto — el admin lo
+  // activa y elige si es un % de la venta o un monto fijo por transacción.
+  recargo_tarjeta: { activo: false, tipo: 'porcentaje', valor: 0 },
+};
 
 // Lee la configuración operativa del negocio (ej. si usa plano de mesas
 // fijo o pedidos libres). Si el negocio es nuevo y no tiene nada guardado

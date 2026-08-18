@@ -100,17 +100,32 @@ export const combinarMesas = asyncHandler(async (req, res) => {
 });
 
 export const cerrarCuenta = asyncHandler(async (req, res) => {
-  const { metodo_pago, propina, descuento, barra_id } = req.body;
-  const pedido = await pedidosService.cerrarCuenta(req.params.id, { metodoPago: metodo_pago, propina, descuento, barraId: barra_id });
+  const { pagos, propina, descuento, barra_id, nota } = req.body;
+  const pedido = await pedidosService.cerrarCuenta(req.params.id, { pagos, propina, descuento, barraId: barra_id, nota });
   await registrarAuditoria({
     negocioId: req.usuario.negocio_id,
     usuarioId: req.usuario.id,
     accion: 'cerrar_cuenta',
     entidad: 'pedido',
     entidadId: pedido.id,
-    detalle: { total: pedido.total, metodo_pago },
+    detalle: { total: pedido.total, metodos: pagos?.map((p) => p.metodo) },
   });
   return response.success(res, pedido, 'Cuenta cerrada');
+});
+
+export const registrarDevolucion = asyncHandler(async (req, res) => {
+  const { barra_id, motivo } = req.body;
+  if (!barra_id) throw new AppError('Falta indicar la barra.', 422);
+  const resultado = await pedidosService.registrarDevolucion(req.params.id, barra_id, motivo);
+  await registrarAuditoria({
+    negocioId: req.usuario.negocio_id,
+    usuarioId: req.usuario.id,
+    accion: 'registrar_devolucion',
+    entidad: 'pedido',
+    entidadId: req.params.id,
+    detalle: { barra_id, motivo, productos_devueltos: resultado.productosDevueltos },
+  });
+  return response.success(res, resultado, `${resultado.productosDevueltos} producto(s) devuelto(s) al inventario`);
 });
 
 export const verificarPago = asyncHandler(async (req, res) => {
