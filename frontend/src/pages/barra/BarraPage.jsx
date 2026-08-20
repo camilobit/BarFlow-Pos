@@ -18,6 +18,10 @@ import { rangoDeTurno } from '../../utils/turno.js';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 const SIGUIENTE_ESTADO = { pendiente: 'preparando', preparando: 'listo', listo: 'entregado' };
 const ETIQUETA_ACCION = { pendiente: 'Empezar', preparando: 'Marcar listo', listo: 'Entregar' };
 const ORDEN_ESTADO = { pendiente: 0, preparando: 1, listo: 2, entregado: 3 };
@@ -56,6 +60,7 @@ export default function BarraPage() {
   const [formTraslado, setFormTraslado] = useState({ insumo_id: '', barra_destino_id: '', cantidad: '', nota: '' });
   const [historial, setHistorial] = useState(null);
   const [filtroFecha, setFiltroFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [filtroEstadisticas, setFiltroEstadisticas] = useState({ desde: '', hasta: '' }); // vacío = histórico completo
   const [enviandoTraslado, setEnviandoTraslado] = useState(false);
 
   const cargarBarras = useCallback(async () => {
@@ -103,7 +108,10 @@ export default function BarraPage() {
     if (!barraId) return;
     setCargandoEstadisticas(true);
     try {
-      setEstadisticas(await barrasApi.estadisticas(barraId));
+      const filtros = {};
+      if (filtroEstadisticas.desde) filtros.desde = rangoDeTurno(filtroEstadisticas.desde, negocioConfig).desde;
+      if (filtroEstadisticas.hasta) filtros.hasta = rangoDeTurno(filtroEstadisticas.hasta, negocioConfig).hasta;
+      setEstadisticas(await barrasApi.estadisticas(barraId, filtros));
     } catch (err) {
       toast.error(err.message || 'No se pudieron cargar las estadísticas.');
       setEstadisticas({
@@ -121,7 +129,7 @@ export default function BarraPage() {
     } finally {
       setCargandoEstadisticas(false);
     }
-  }, [barraId]);
+  }, [barraId, filtroEstadisticas, negocioConfig]);
 
   const cargarInsumos = useCallback(async () => {
     setInsumos(await productosApi.insumos());
@@ -759,16 +767,61 @@ export default function BarraPage() {
         )}
 
         {tab === 'estadisticas' && (
-          cargandoEstadisticas && !estadisticas ? (
-            <LoadingScreen label="Cargando estadísticas…" />
-          ) : !estadisticas ? (
-            <EmptyState icono={ClipboardList} titulo="No hay pedidos en este momento" oscuro />
-          ) : (
-            <div className="space-y-5">
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-mist-400" htmlFor="stats-desde">Desde</label>
+                  <input
+                    id="stats-desde"
+                    type="date"
+                    className="input !w-auto bg-ink-950 !text-white [color-scheme:dark]"
+                    value={filtroEstadisticas.desde}
+                    onChange={(e) => setFiltroEstadisticas({ ...filtroEstadisticas, desde: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-mist-400" htmlFor="stats-hasta">Hasta</label>
+                  <input
+                    id="stats-hasta"
+                    type="date"
+                    className="input !w-auto bg-ink-950 !text-white [color-scheme:dark]"
+                    value={filtroEstadisticas.hasta}
+                    onChange={(e) => setFiltroEstadisticas({ ...filtroEstadisticas, hasta: e.target.value })}
+                  />
+                </div>
+                <button
+                  onClick={() => setFiltroEstadisticas({ desde: hoyISO(), hasta: hoyISO() })}
+                  className="rounded-lg bg-ink-800 px-3 py-2 text-xs font-semibold text-mist-300 hover:bg-ink-800/70"
+                >
+                  Hoy
+                </button>
+                {(filtroEstadisticas.desde || filtroEstadisticas.hasta) && (
+                  <button
+                    onClick={() => setFiltroEstadisticas({ desde: '', hasta: '' })}
+                    className="rounded-lg px-3 py-2 text-xs font-semibold text-mist-500 hover:text-white"
+                  >
+                    Ver todo el historial
+                  </button>
+                )}
+              </div>
+              {(filtroEstadisticas.desde || filtroEstadisticas.hasta) && (
+                <p className="mt-2 text-xs text-mist-500">
+                  Cada día cubre desde las {negocioConfig?.turno_inicio || '18:00'} hasta las {negocioConfig?.turno_fin || '08:00'} del día siguiente — el turno completo.
+                </p>
+              )}
+            </div>
+
+            {cargandoEstadisticas && !estadisticas ? (
+              <LoadingScreen label="Cargando estadísticas…" />
+            ) : !estadisticas ? (
+              <EmptyState icono={ClipboardList} titulo="No hay pedidos en este momento" oscuro />
+            ) : (
+              <div className="space-y-5">
               {estadisticas.totalPedidos === 0 && (
                 <div className="flex items-center gap-2 rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3 text-sm text-mist-400">
                   <ClipboardList size={16} />
-                  No hay pedidos en este momento. Las estadísticas se irán llenando a medida que lleguen ventas.
+                  No hay pedidos en este rango de fechas todavía.
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -798,7 +851,8 @@ export default function BarraPage() {
                 </div>
               </div>
             </div>
-          )
+            )}
+          </div>
         )}
       </main>
 
