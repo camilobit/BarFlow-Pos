@@ -63,7 +63,12 @@ export const cajaApi = {
   historial: (params) => api.get('/caja/historial', { params }).then((r) => r.data),
   abrir: (barraId, monto_inicial) => api.post('/caja/abrir', { barra_id: barraId, monto_inicial }).then((r) => r.data),
   movimiento: (barraId, payload) => api.post('/caja/movimiento', { ...payload, barra_id: barraId }).then((r) => r.data),
-  cerrar: (barraId, monto_final_real) => api.post('/caja/cerrar', { barra_id: barraId, monto_final_real }).then((r) => r.data),
+  cerrar: (barraId, monto_final_real, conteoFisico = []) =>
+    api.post('/caja/cerrar', { barra_id: barraId, monto_final_real, conteo_fisico: conteoFisico }).then((r) => r.data),
+  insumosParaConteo: (barraId) => api.get('/caja/insumos-para-conteo', { params: { barra_id: barraId } }).then((r) => r.data),
+  reporte: (cajaId) => api.get(`/caja/${cajaId}/reporte`).then((r) => r.data),
+  marcarRevisado: (cajaId) => api.patch(`/caja/${cajaId}/revisar`).then((r) => r.data),
+  pendientesRevision: () => api.get('/caja/pendientes-revision').then((r) => r.data),
 };
 
 export const clientesApi = {

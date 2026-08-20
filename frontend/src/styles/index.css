@@ -165,3 +165,25 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Impresión de reportes (ej. cierre de caja) — al usar window.print(),
+   solo se ve el contenido marcado con #reporte-cierre-imprimible, nada
+   del resto de la app (sidebar, botones, overlays oscuros). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #reporte-cierre-imprimible,
+  #reporte-cierre-imprimible * {
+    visibility: visible;
+  }
+  #reporte-cierre-imprimible {
+    position: absolute;
+    inset: 0;
+    color: #000;
+    background: #fff;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+}

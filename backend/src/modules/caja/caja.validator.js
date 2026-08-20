@@ -8,6 +8,14 @@ export const abrirCajaSchema = z.object({
 export const cerrarCajaSchema = z.object({
   barra_id: z.string().uuid().nullable().optional(),
   monto_final_real: z.number().nonnegative(),
+  conteo_fisico: z
+    .array(
+      z.object({
+        insumo_id: z.string().uuid(),
+        cantidad_fisica: z.number().nonnegative(),
+      })
+    )
+    .optional(),
 });
 
 export const movimientoCajaSchema = z.object({

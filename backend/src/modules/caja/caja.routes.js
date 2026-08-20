@@ -11,7 +11,11 @@ router.use(requireAuth, requireRole('admin_negocio', 'super_admin', 'mesero', 'b
 router.get('/actual', ctrl.obtenerActual);
 router.get('/abiertas', ctrl.listarAbiertas);
 router.get('/resumen', ctrl.resumen);
+router.get('/insumos-para-conteo', ctrl.insumosParaConteo);
 router.get('/historial', requireRole('admin_negocio', 'super_admin'), ctrl.historial);
+router.get('/pendientes-revision', requireRole('admin_negocio', 'super_admin'), ctrl.pendientesRevision);
+router.get('/:id/reporte', ctrl.reporte);
+router.patch('/:id/revisar', requireRole('admin_negocio', 'super_admin'), ctrl.marcarRevisado);
 router.post('/abrir', validate(abrirCajaSchema), ctrl.abrir);
 router.post('/movimiento', validate(movimientoCajaSchema), ctrl.registrarMovimiento);
 router.post('/cerrar', validate(cerrarCajaSchema), ctrl.cerrar);

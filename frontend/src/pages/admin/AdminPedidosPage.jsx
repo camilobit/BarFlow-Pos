@@ -127,9 +127,23 @@ export default function AdminPedidosPage() {
                       {Number(p.descuento) > 0 && <div className="flex justify-between text-mist-500"><span>Descuento</span><span>-{formatoCOP.format(p.descuento)}</span></div>}
                       {Number(p.propina) > 0 && <div className="flex justify-between text-mist-500"><span>Propina</span><span>+{formatoCOP.format(p.propina)}</span></div>}
                       <div className="flex justify-between font-semibold text-ink-900"><span>Total</span><span>{formatoCOP.format(p.total)}</span></div>
-                      <div className="flex justify-between text-mist-500"><span>Método de pago</span><span className="capitalize">{p.metodo_pago}</span></div>
                       <div className="flex justify-between text-mist-500"><span>Verificado por barra</span><span>{p.pago_verificado ? 'Sí' : 'No'}</span></div>
                     </div>
+
+                    {p.pagos?.length > 0 && (
+                      <div className="mt-2 space-y-1 border-t border-mist-200 pt-2">
+                        <p className="text-xs font-semibold text-mist-500">Pagado con</p>
+                        {p.pagos.map((pago) => (
+                          <div key={pago.id} className="flex justify-between text-xs">
+                            <span className="capitalize text-ink-800">
+                              {pago.metodo}
+                              {Number(pago.recargo) > 0 && <span className="text-gold-600"> (+{formatoCOP.format(pago.recargo)} recargo)</span>}
+                            </span>
+                            <span className="font-medium text-ink-900">{formatoCOP.format(Number(pago.monto_base) + Number(pago.recargo))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

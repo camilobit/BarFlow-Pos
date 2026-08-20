@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { rangoDeTurno } from '../../utils/turno.js';
 import Modal from '../../components/common/Modal.jsx';
 import EscribirParaConfirmar from '../../components/common/EscribirParaConfirmar.jsx';
+import ReporteCierreCaja from '../../components/common/ReporteCierreCaja.jsx';
 import { SkeletonKpis } from '../../components/common/Skeleton.jsx';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -45,6 +46,8 @@ export default function AdminCajaPage() {
 
   const [historial, setHistorial] = useState(null);
   const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [pendientes, setPendientes] = useState([]);
+  const [cajaVerReporte, setCajaVerReporte] = useState(null);
   const [filtroHistorial, setFiltroHistorial] = useState({ desde: hoyISO(), hasta: hoyISO(), barra_id: '' });
 
   useEffect(() => {
@@ -72,6 +75,11 @@ export default function AdminCajaPage() {
   }, [barraActiva]);
 
   useEffect(() => { cargarCaja(); }, [cargarCaja]);
+
+  const cargarPendientes = useCallback(async () => {
+    setPendientes(await cajaApi.pendientesRevision());
+  }, []);
+  useEffect(() => { cargarPendientes(); }, [cargarPendientes]);
 
   const cargarHistorial = useCallback(async () => {
     setHistorial(null);
@@ -296,6 +304,30 @@ export default function AdminCajaPage() {
         </>
       )}
 
+      {pendientes.length > 0 && (
+        <div className="rounded-2xl border-2 border-gold-400 bg-gold-50 p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <TriangleAlert size={18} className="text-gold-600" />
+            <h2 className="font-display text-sm font-bold text-gold-700">Cierres pendientes de revisar ({pendientes.length})</h2>
+          </div>
+          <div className="space-y-2">
+            {pendientes.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setCajaVerReporte(c.id)}
+                className="flex w-full items-center justify-between rounded-xl bg-white px-3.5 py-2.5 text-left hover:bg-mist-50"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-ink-900">{c.barra?.nombre || 'Caja'}</p>
+                  <p className="text-xs text-mist-500">{new Date(c.cerrada_at).toLocaleString('es-CO')}</p>
+                </div>
+                <span className="text-xs font-semibold text-gold-600">Ver reporte →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Historial de sesiones de caja — por barra, con efectivo vs. total */}
       <div className="card p-5">
         <button onClick={() => setHistorialAbierto((v) => !v)} className="flex w-full items-center justify-between">
@@ -342,6 +374,7 @@ export default function AdminCajaPage() {
                       <th className="px-3 py-2">Cierre contado</th>
                       <th className="px-3 py-2">Diferencia</th>
                       <th className="px-3 py-2">Estado</th>
+                      <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -357,9 +390,23 @@ export default function AdminCajaPage() {
                           {s.diferencia !== null ? formatoCOP.format(s.diferencia) : '—'}
                         </td>
                         <td className="px-3 py-2">
-                          <span className={`badge ${s.cerrada_at ? 'bg-mist-100 text-mist-500' : 'bg-petrol-100 text-petrol-700'}`}>
-                            {s.cerrada_at ? 'Cerrada' : 'Abierta'}
-                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            <span className={`badge ${s.cerrada_at ? 'bg-mist-100 text-mist-500' : 'bg-petrol-100 text-petrol-700'}`}>
+                              {s.cerrada_at ? 'Cerrada' : 'Abierta'}
+                            </span>
+                            {s.tiene_alertas && (
+                              <span className={`badge ${s.revisado_at ? 'bg-mist-100 text-mist-500' : 'bg-gold-200 text-gold-600'}`}>
+                                {s.revisado_at ? 'Revisado' : 'Alerta'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {s.cerrada_at && (
+                            <button onClick={() => setCajaVerReporte(s.id)} className="text-xs font-semibold text-petrol-600 hover:underline">
+                              Ver reporte
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -539,6 +586,15 @@ export default function AdminCajaPage() {
           textoConfirmar={limpiando ? 'Limpiando…' : 'Limpiar ahora'}
           onConfirmar={confirmarLimpieza}
           onCancelar={() => setModalConfirmarLimpieza(false)}
+        />
+      )}
+
+      {cajaVerReporte && (
+        <ReporteCierreCaja
+          cajaId={cajaVerReporte}
+          onClose={() => setCajaVerReporte(null)}
+          permitirRevisar
+          onRevisado={() => { cargarPendientes(); if (historialAbierto) cargarHistorial(); }}
         />
       )}
     </div>

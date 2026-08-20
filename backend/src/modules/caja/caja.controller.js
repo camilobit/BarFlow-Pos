@@ -30,11 +30,33 @@ export const resumen = asyncHandler(async (req, res) => {
   return response.success(res, { caja, ...resumenCaja });
 });
 
+export const insumosParaConteo = asyncHandler(async (req, res) => {
+  const caja = await cajaService.obtenerCajaAbierta(req.usuario.negocio_id, req.query.barra_id || null);
+  if (!caja) throw new AppError('No hay una caja abierta para esta barra.', 404);
+  const insumos = await cajaService.insumosParaConteo(caja.barra_id);
+  return response.success(res, insumos);
+});
+
 export const cerrar = asyncHandler(async (req, res) => {
   const caja = await cajaService.obtenerCajaAbierta(req.usuario.negocio_id, req.body.barra_id || null);
   if (!caja) throw new AppError('No hay una caja abierta para esta barra.', 404);
-  const resultado = await cajaService.cerrarCaja(caja.id, req.usuario.id, req.body.monto_final_real);
+  const resultado = await cajaService.cerrarCaja(caja.id, req.usuario.id, req.body.monto_final_real, req.body.conteo_fisico || []);
   return response.success(res, resultado, 'Caja cerrada');
+});
+
+export const reporte = asyncHandler(async (req, res) => {
+  const reporte = await cajaService.reporteCierre(req.params.id);
+  return response.success(res, reporte);
+});
+
+export const marcarRevisado = asyncHandler(async (req, res) => {
+  const caja = await cajaService.marcarCajaRevisada(req.params.id, req.usuario.id);
+  return response.success(res, caja, 'Marcado como revisado');
+});
+
+export const pendientesRevision = asyncHandler(async (req, res) => {
+  const cajas = await cajaService.pendientesRevision(req.usuario.negocio_id);
+  return response.success(res, cajas);
 });
 
 export const historial = asyncHandler(async (req, res) => {

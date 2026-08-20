@@ -14,6 +14,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import { useConfirm } from '../../hooks/useConfirm.js';
 import EmptyState from '../../components/common/EmptyState.jsx';
 import CambiarPasswordModal from '../../components/common/CambiarPasswordModal.jsx';
+import ReporteCierreCaja from '../../components/common/ReporteCierreCaja.jsx';
 import { rangoDeTurno } from '../../utils/turno.js';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -50,6 +51,11 @@ export default function BarraPage() {
   const { confirmar, estaAbierto, opciones, onConfirmar, onCancelar } = useConfirm();
   const [modalAbrirCaja, setModalAbrirCaja] = useState(false);
   const [modalCerrarCaja, setModalCerrarCaja] = useState(false);
+  const [modalConteoFisico, setModalConteoFisico] = useState(false);
+  const [insumosConteo, setInsumosConteo] = useState(null);
+  const [conteoFisico, setConteoFisico] = useState({}); // { insumo_id: '25' }
+  const [cajaRecienCerrada, setCajaRecienCerrada] = useState(null);
+  const [cerrandoCaja, setCerrandoCaja] = useState(false);
   const [modalPassword, setModalPassword] = useState(false);
   const [modalNuevoTraslado, setModalNuevoTraslado] = useState(false);
   const [montoInicial, setMontoInicial] = useState('');
@@ -270,16 +276,40 @@ export default function BarraPage() {
     }
   }
 
-  async function cerrarCaja(e) {
+  // Paso 1: guarda el monto en efectivo contado, y abre la pantalla de
+  // conteo físico de inventario antes de cerrar de verdad.
+  async function irAConteoFisico(e) {
     e.preventDefault();
+    setModalCerrarCaja(false);
     try {
-      await cajaApi.cerrar(barraId, Number(montoFinal) || 0);
+      setInsumosConteo(await cajaApi.insumosParaConteo(barraId));
+    } catch (err) {
+      setInsumosConteo([]);
+      toast.error(err.message);
+    }
+    setModalConteoFisico(true);
+  }
+
+  // Paso 2: cierra la caja de verdad, con el conteo que el cajero acaba
+  // de hacer — los insumos que se dejaron en blanco quedan "sin
+  // verificar" en el reporte, no bloquean el cierre.
+  async function confirmarCierreCaja() {
+    setCerrandoCaja(true);
+    try {
+      const conteo = Object.entries(conteoFisico)
+        .filter(([, valor]) => valor !== '' && valor !== undefined)
+        .map(([insumo_id, valor]) => ({ insumo_id, cantidad_fisica: Number(valor) }));
+      const resultado = await cajaApi.cerrar(barraId, Number(montoFinal) || 0, conteo);
       toast.success('Caja cerrada');
-      setModalCerrarCaja(false);
+      setModalConteoFisico(false);
       setMontoFinal('');
+      setConteoFisico({});
+      setCajaRecienCerrada(resultado.caja.id);
       cargarCaja();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setCerrandoCaja(false);
     }
   }
 
@@ -759,6 +789,16 @@ export default function BarraPage() {
                       <span className="capitalize">{pedido.metodo_pago}</span>
                       <span>{new Date(pedido.cerrado_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
+                    {pedido.pagos?.length > 0 && (
+                      <div className="mt-1.5 space-y-0.5 border-t border-ink-800 pt-1.5">
+                        {pedido.pagos.map((pago) => (
+                          <div key={pago.id} className="flex justify-between text-xs">
+                            <span className="capitalize text-mist-400">{pago.metodo}</span>
+                            <span className="text-mist-300">{formatoCOP.format(Number(pago.monto_base) + Number(pago.recargo))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
@@ -870,14 +910,54 @@ export default function BarraPage() {
 
       {modalCerrarCaja && (
         <Modal title={`Cerrar caja de ${nombreBarra}`} onClose={() => setModalCerrarCaja(false)}>
-          <form onSubmit={cerrarCaja} className="space-y-3">
+          <form onSubmit={irAConteoFisico} className="space-y-3">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-mist-500">Monto final contado en efectivo</label>
               <input required type="number" min="0" className="input" value={montoFinal} onChange={(e) => setMontoFinal(e.target.value)} />
             </div>
-            <button type="submit" className="btn-danger w-full">Cerrar caja</button>
+            <button type="submit" className="btn-danger w-full">Siguiente: contar inventario</button>
           </form>
         </Modal>
+      )}
+
+      {modalConteoFisico && (
+        <Modal title="Cuenta lo que hay en el estante" onClose={() => setModalConteoFisico(false)} maxWidth="max-w-lg">
+          <p className="mb-4 text-sm text-mist-600">
+            Cuenta lo que veas ahora mismo en cada uno. Lo que dejes en blanco queda "sin verificar" en el reporte — no te bloquea el cierre.
+          </p>
+          {insumosConteo === null ? (
+            <p className="py-6 text-center text-sm text-mist-500">Cargando…</p>
+          ) : insumosConteo.length === 0 ? (
+            <p className="py-6 text-center text-sm text-mist-500">Esta barra no tiene insumos asignados todavía.</p>
+          ) : (
+            <div className="mb-4 max-h-[50vh] space-y-2 overflow-y-auto">
+              {insumosConteo.map((s) => (
+                <div key={s.insumo_id} className="flex items-center gap-3 rounded-xl bg-mist-50 p-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-ink-900">{s.insumo?.nombre}</p>
+                    <p className="text-xs text-mist-500">Sistema calcula: {s.stock} {s.insumo?.unidad}</p>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="Cuenta física"
+                    className="input w-28 !py-2"
+                    value={conteoFisico[s.insumo_id] ?? ''}
+                    onChange={(e) => setConteoFisico({ ...conteoFisico, [s.insumo_id]: e.target.value })}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={confirmarCierreCaja} disabled={cerrandoCaja} className="btn-danger w-full">
+            {cerrandoCaja ? 'Cerrando…' : 'Cerrar caja'}
+          </button>
+        </Modal>
+      )}
+
+      {cajaRecienCerrada && (
+        <ReporteCierreCaja cajaId={cajaRecienCerrada} onClose={() => setCajaRecienCerrada(null)} />
       )}
 
       {modalNuevoTraslado && (

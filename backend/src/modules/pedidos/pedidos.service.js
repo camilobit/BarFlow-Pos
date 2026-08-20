@@ -8,6 +8,7 @@ const SELECT_PEDIDO_COMPLETO = `
   mesero:usuarios!pedidos_mesero_id_fkey(id, nombre, apellido),
   cliente:clientes(id, nombre, apellido),
   barra_pago:barras!pedidos_barra_id_fkey(id, nombre),
+  pagos:pedido_pagos(id, metodo, monto_base, recargo, created_at),
   items:pedido_items(
     id, cantidad, precio_unitario, observaciones, estado, producto_id, barra_id,
     producto:productos(id, nombre, imagen_url)
