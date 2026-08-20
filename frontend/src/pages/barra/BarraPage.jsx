@@ -37,6 +37,7 @@ export default function BarraPage() {
   const [pagosPendientes, setPagosPendientes] = useState([]);
   const [porCobrar, setPorCobrar] = useState([]);
   const [caja, setCaja] = useState(undefined);
+  const [resumenCaja, setResumenCaja] = useState(null);
   const [estadisticas, setEstadisticas] = useState(null);
   const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
   const [tab, setTab] = useState('pedidos'); // pedidos | cobros | traslados | historial | caja | estadisticas
@@ -92,7 +93,9 @@ export default function BarraPage() {
 
   const cargarCaja = useCallback(async () => {
     if (!barraId) return;
-    setCaja(await cajaApi.actual(barraId));
+    const actual = await cajaApi.actual(barraId);
+    setCaja(actual);
+    setResumenCaja(actual ? await cajaApi.resumen(barraId) : null);
   }, [barraId]);
 
   const cargarEstadisticas = useCallback(async () => {
@@ -545,14 +548,17 @@ export default function BarraPage() {
                   <p className="mb-1 mt-1 font-display text-xl font-bold text-white">
                     {formatoCOP.format(pedido._tipo === 'verificar' ? pedido.total : pedido.subtotal)}
                   </p>
-                  {pedido._tipo === 'verificar' && <p className="mb-3 text-xs capitalize text-gold-400">{pedido.metodo_pago}</p>}
+                  {pedido._tipo === 'verificar' && <p className="mb-1 text-xs capitalize text-gold-400">{pedido.metodo_pago}</p>}
+                  {pedido.observaciones && (
+                    <p className="mb-3 rounded-lg bg-ink-800 px-2.5 py-1.5 text-xs text-gold-400">📝 {pedido.observaciones}</p>
+                  )}
 
                   {pedido._tipo === 'verificar' ? (
-                    <button onClick={() => confirmarPago(pedido)} className="btn-gold w-full">
+                    <button onClick={() => confirmarPago(pedido)} className="btn-gold mt-2 w-full">
                       <BadgeCheck size={16} /> Confirmar recibido
                     </button>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="mt-2 flex gap-2">
                       <button onClick={() => navigate(`/mesero/pedido/${pedido.id}`)} className="btn-gold flex-1">
                         <Receipt size={16} /> Cobrar ahora
                       </button>
@@ -623,7 +629,7 @@ export default function BarraPage() {
         )}
 
         {tab === 'caja' && (
-          <div className="max-w-lg space-y-4">
+          <div className="max-w-2xl space-y-4">
             <div className="rounded-2xl border border-ink-800 bg-ink-900 p-5">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-white">
@@ -640,6 +646,53 @@ export default function BarraPage() {
                 {caja ? `Abierta con ${formatoCOP.format(caja.monto_inicial)} de base.` : 'No hay caja abierta en esta barra todavía.'}
               </p>
             </div>
+
+            {caja && resumenCaja && (
+              <>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <TarjetaStat icono={TrendingUp} etiqueta="Ventas totales" valor={formatoCOP.format(resumenCaja.totales.ingresos)} />
+                  <TarjetaStat icono={Wallet} etiqueta="Efectivo (esperado)" valor={formatoCOP.format(resumenCaja.totales.ingresosEfectivo)} acento="gold" />
+                  <TarjetaStat icono={ArrowLeftRight} etiqueta="Transferencia" valor={formatoCOP.format(resumenCaja.totales.porMetodo?.transferencia || 0)} />
+                  <TarjetaStat icono={Receipt} etiqueta="Tarjeta" valor={formatoCOP.format(resumenCaja.totales.porMetodo?.tarjeta || 0)} />
+                </div>
+
+                <div className="rounded-2xl border border-ink-800 bg-ink-900 p-5">
+                  <h2 className="mb-3 font-display text-sm font-bold text-white">Ventas de este turno</h2>
+                  {resumenCaja.movimientos.filter((m) => m.tipo === 'venta').length === 0 ? (
+                    <p className="text-sm text-mist-500">Todavía no hay ventas registradas en esta caja.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {resumenCaja.movimientos.filter((m) => m.tipo === 'venta').map((m) => (
+                        <div key={m.id} className="flex items-center justify-between rounded-xl bg-ink-800 px-3 py-2.5">
+                          <div>
+                            <p className="text-sm text-white">{m.descripcion || 'Venta'}</p>
+                            <p className="text-xs capitalize text-mist-500">{m.metodo_pago || 'sin método'} · {new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</p>
+                          </div>
+                          <span className="font-semibold text-petrol-300">{formatoCOP.format(m.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {resumenCaja.movimientos.some((m) => m.tipo === 'ingreso' || m.tipo === 'egreso') && (
+                  <div className="rounded-2xl border border-ink-800 bg-ink-900 p-5">
+                    <h2 className="mb-3 font-display text-sm font-bold text-white">Otros movimientos</h2>
+                    <div className="space-y-2">
+                      {resumenCaja.movimientos.filter((m) => m.tipo === 'ingreso' || m.tipo === 'egreso').map((m) => (
+                        <div key={m.id} className="flex items-center justify-between rounded-xl bg-ink-800 px-3 py-2.5">
+                          <div>
+                            <p className="text-sm capitalize text-white">{m.tipo}: {m.descripcion || '—'}</p>
+                            <p className="text-xs text-mist-500">{new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</p>
+                          </div>
+                          <span className={`font-semibold ${m.tipo === 'egreso' ? 'text-red-400' : 'text-petrol-300'}`}>{formatoCOP.format(m.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -688,6 +741,9 @@ export default function BarraPage() {
                         <p key={it.id} className="text-xs text-mist-400">{it.cantidad}× {it.producto?.nombre}</p>
                       ))}
                     </div>
+                    {pedido.observaciones && (
+                      <p className="mb-2 rounded-lg bg-ink-800 px-2.5 py-1.5 text-xs text-gold-400">📝 {pedido.observaciones}</p>
+                    )}
                     <div className="flex items-center justify-between text-xs text-mist-500">
                       <span className="capitalize">{pedido.metodo_pago}</span>
                       <span>{new Date(pedido.cerrado_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
