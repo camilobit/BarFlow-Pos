@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Receipt, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { pedidosApi, barrasApi } from '../../services/endpoints.js';
+import { useAuth } from '../../contexts/AuthContext.jsx';
+import { rangoDeTurno } from '../../utils/turno.js';
 import EmptyState from '../../components/common/EmptyState.jsx';
 import { SkeletonTabla } from '../../components/common/Skeleton.jsx';
 
@@ -11,6 +13,7 @@ function hoyISO() {
 }
 
 export default function AdminPedidosPage() {
+  const { negocioConfig } = useAuth();
   const [pedidos, setPedidos] = useState(null);
   const [barras, setBarras] = useState([]);
   const [expandido, setExpandido] = useState(null);
@@ -18,16 +21,17 @@ export default function AdminPedidosPage() {
 
   const cargar = useCallback(async () => {
     setPedidos(null);
-    const params = {
-      estado: 'pagado',
-      desde: `${filtros.desde}T00:00:00`,
-      hasta: `${filtros.hasta}T23:59:59`,
-    };
+    // El "día operativo" de un bar cruza la medianoche — filtrar por
+    // "sábado" trae todo lo vendido desde la hora de apertura del turno
+    // del sábado hasta la hora de cierre en la madrugada del domingo.
+    const inicio = rangoDeTurno(filtros.desde, negocioConfig).desde;
+    const fin = rangoDeTurno(filtros.hasta, negocioConfig).hasta;
+    const params = { estado: 'pagado', desde: inicio, hasta: fin };
     if (filtros.barra_id) params.barra_id = filtros.barra_id;
     if (filtros.origen) params.origen = filtros.origen;
     const data = await pedidosApi.listar(params);
     setPedidos(data.sort((a, b) => new Date(b.cerrado_at) - new Date(a.cerrado_at)));
-  }, [filtros]);
+  }, [filtros, negocioConfig]);
 
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => { barrasApi.listar().then(setBarras); }, []);
@@ -75,6 +79,9 @@ export default function AdminPedidosPage() {
           </div>
         )}
       </div>
+      <p className="-mt-3 text-xs text-mist-500">
+        Cada día cubre desde las {negocioConfig?.turno_inicio || '18:00'} hasta las {negocioConfig?.turno_fin || '08:00'} del día siguiente — el turno completo, aunque cruce la medianoche.
+      </p>
 
       {!pedidos ? (
         <SkeletonTabla filas={6} columnas={5} />

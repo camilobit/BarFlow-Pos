@@ -55,6 +55,13 @@ const CONFIGURACION_POR_DEFECTO = {
   // datáfono por pagos con tarjeta. Apagado por defecto — el admin lo
   // activa y elige si es un % de la venta o un monto fijo por transacción.
   recargo_tarjeta: { activo: false, tipo: 'porcentaje', valor: 0 },
+  // El "día operativo" de un bar no coincide con el día del calendario:
+  // un sábado en la noche sigue siendo "sábado" hasta que cierra en la
+  // madrugada del domingo. Con esta ventana, filtrar por "sábado" trae
+  // todo lo vendido entre las 6pm del sábado y las 8am del domingo, en
+  // vez de cortarse a la medianoche.
+  turno_inicio: '18:00',
+  turno_fin: '08:00',
 };
 
 // Lee la configuración operativa del negocio (ej. si usa plano de mesas

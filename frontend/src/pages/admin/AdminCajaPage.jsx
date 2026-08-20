@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Lock, Unlock, Plus, Minus, TriangleAlert, Settings, History as HistoryIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { Lock, Unlock, Plus, Minus, TriangleAlert, Settings, History as HistoryIcon, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cajaApi, barrasApi, negociosApi } from '../../services/endpoints.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { rangoDeTurno } from '../../utils/turno.js';
 import Modal from '../../components/common/Modal.jsx';
 import EscribirParaConfirmar from '../../components/common/EscribirParaConfirmar.jsx';
 import { SkeletonKpis } from '../../components/common/Skeleton.jsx';
@@ -37,6 +38,11 @@ export default function AdminCajaPage() {
   const [recargoValor, setRecargoValor] = useState('');
   const [guardandoRecargo, setGuardandoRecargo] = useState(false);
 
+  const [modalTurno, setModalTurno] = useState(false);
+  const [turnoInicio, setTurnoInicio] = useState('18:00');
+  const [turnoFin, setTurnoFin] = useState('08:00');
+  const [guardandoTurno, setGuardandoTurno] = useState(false);
+
   const [historial, setHistorial] = useState(null);
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [filtroHistorial, setFiltroHistorial] = useState({ desde: hoyISO(), hasta: hoyISO(), barra_id: '' });
@@ -54,6 +60,8 @@ export default function AdminCajaPage() {
       setRecargoTipo(negocioConfig.recargo_tarjeta.tipo || 'porcentaje');
       setRecargoValor(negocioConfig.recargo_tarjeta.valor || '');
     }
+    if (negocioConfig?.turno_inicio) setTurnoInicio(negocioConfig.turno_inicio);
+    if (negocioConfig?.turno_fin) setTurnoFin(negocioConfig.turno_fin);
   }, [negocioConfig]);
 
   const cargarCaja = useCallback(async () => {
@@ -68,12 +76,12 @@ export default function AdminCajaPage() {
   const cargarHistorial = useCallback(async () => {
     setHistorial(null);
     const params = {
-      desde: `${filtroHistorial.desde}T00:00:00`,
-      hasta: `${filtroHistorial.hasta}T23:59:59`,
+      desde: rangoDeTurno(filtroHistorial.desde, negocioConfig).desde,
+      hasta: rangoDeTurno(filtroHistorial.hasta, negocioConfig).hasta,
     };
     if (filtroHistorial.barra_id) params.barra_id = filtroHistorial.barra_id;
     setHistorial(await cajaApi.historial(params));
-  }, [filtroHistorial]);
+  }, [filtroHistorial, negocioConfig]);
 
   useEffect(() => { if (historialAbierto) cargarHistorial(); }, [historialAbierto, cargarHistorial]);
 
@@ -134,6 +142,21 @@ export default function AdminCajaPage() {
     }
   }
 
+  async function guardarTurno(e) {
+    e.preventDefault();
+    setGuardandoTurno(true);
+    try {
+      await negociosApi.actualizarMiConfiguracion({ turno_inicio: turnoInicio, turno_fin: turnoFin });
+      toast.success('Horario de operación guardado');
+      setModalTurno(false);
+      recargarNegocioConfig?.();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setGuardandoTurno(false);
+    }
+  }
+
   async function confirmarLimpieza() {
     setLimpiando(true);
     try {
@@ -163,9 +186,14 @@ export default function AdminCajaPage() {
           <h1 className="font-display text-2xl font-bold text-ink-900">Caja</h1>
           <p className="text-sm text-mist-500">Cada barra maneja su propio efectivo y su propio cierre</p>
         </div>
-        <button onClick={() => setModalRecargo(true)} className="btn-secondary">
-          <Settings size={16} /> Recargo por tarjeta
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setModalTurno(true)} className="btn-secondary">
+            <Clock size={16} /> Horario de operación
+          </button>
+          <button onClick={() => setModalRecargo(true)} className="btn-secondary">
+            <Settings size={16} /> Recargo por tarjeta
+          </button>
+        </div>
       </div>
 
       {barras.length === 0 ? (
@@ -355,6 +383,32 @@ export default function AdminCajaPage() {
           <TriangleAlert size={16} /> Limpiar pedidos y caja de prueba
         </button>
       </div>
+
+      {modalTurno && (
+        <Modal title="Horario de operación" onClose={() => setModalTurno(false)}>
+          <p className="mb-4 text-sm text-mist-600">
+            El "día" de tu negocio no tiene que cortarse a medianoche. Si abres a las 6pm y cierras a las 8am del día siguiente, todo lo que vendas en esa ventana cuenta como el mismo turno — así los filtros de fecha (Historial, Caja) no te parten un sábado en la noche por la mitad.
+          </p>
+          <form onSubmit={guardarTurno} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="turno-inicio">Apertura de turno</label>
+                <input id="turno-inicio" required type="time" className="input" value={turnoInicio} onChange={(e) => setTurnoInicio(e.target.value)} />
+              </div>
+              <div>
+                <label className="label" htmlFor="turno-fin">Cierre de turno</label>
+                <input id="turno-fin" required type="time" className="input" value={turnoFin} onChange={(e) => setTurnoFin(e.target.value)} />
+              </div>
+            </div>
+            <p className="help-text">
+              Ej: apertura {turnoInicio || '18:00'}, cierre {turnoFin || '08:00'} → las ventas del "sábado" van desde las {turnoInicio || '18:00'} del sábado hasta las {turnoFin || '08:00'} del domingo.
+            </p>
+            <button type="submit" disabled={guardandoTurno} className="btn-primary w-full">
+              {guardandoTurno ? 'Guardando…' : 'Guardar horario'}
+            </button>
+          </form>
+        </Modal>
+      )}
 
       {modalRecargo && (
         <Modal title="Recargo por pago con tarjeta" onClose={() => setModalRecargo(false)}>

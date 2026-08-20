@@ -14,6 +14,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import { useConfirm } from '../../hooks/useConfirm.js';
 import EmptyState from '../../components/common/EmptyState.jsx';
 import CambiarPasswordModal from '../../components/common/CambiarPasswordModal.jsx';
+import { rangoDeTurno } from '../../utils/turno.js';
 
 const formatoCOP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -28,7 +29,7 @@ const COLOR_ESTADO = {
 };
 
 export default function BarraPage() {
-  const { perfil, cerrarSesion } = useAuth();
+  const { perfil, cerrarSesion, negocioConfig } = useAuth();
   const navigate = useNavigate();
   const [barras, setBarras] = useState([]);
   const [todasLasBarras, setTodasLasBarras] = useState([]);
@@ -131,10 +132,9 @@ export default function BarraPage() {
   // interpretar las estadísticas agregadas.
   const cargarHistorial = useCallback(async () => {
     if (!barraId) return;
-    const desde = `${filtroFecha}T00:00:00`;
-    const hasta = `${filtroFecha}T23:59:59`;
+    const { desde, hasta } = rangoDeTurno(filtroFecha, negocioConfig);
     setHistorial(await pedidosApi.listar({ estado: 'pagado', barra_id: barraId, desde, hasta }));
-  }, [barraId, filtroFecha]);
+  }, [barraId, filtroFecha, negocioConfig]);
 
   const cargarMovimientos = useCallback(async () => {
     if (!barraId) return;
@@ -698,7 +698,7 @@ export default function BarraPage() {
 
         {tab === 'historial' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <label htmlFor="historial-fecha" className="text-xs font-semibold text-mist-400">Fecha</label>
               <input
                 id="historial-fecha"
@@ -713,6 +713,9 @@ export default function BarraPage() {
                 </span>
               )}
             </div>
+            <p className="text-xs text-mist-500">
+              Cubre desde las {negocioConfig?.turno_inicio || '18:00'} de este día hasta las {negocioConfig?.turno_fin || '08:00'} del día siguiente — el turno completo, aunque cruce la medianoche.
+            </p>
 
             {!historial ? (
               <LoadingScreen label="Cargando historial…" />
